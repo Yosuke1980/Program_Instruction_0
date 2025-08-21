@@ -1,0 +1,31 @@
+{
+  "name": "program_instraction",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "build": "tsc",
+    "build:watch": "tsc --watch",
+    "build:gas": "rm -rf dist && tsc && echo 'Google Apps Script用JavaScriptファイルが生成されました: dist/コード.js'",
+    "lint": "tsc --noEmit",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/google-apps-script": "^1.0.99",
+    "typescript": "^5.8.3"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Yosuke1980/Program_Instraction.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Yosuke1980/Program_Instraction/issues"
+  },
+  "homepage": "https://github.com/Yosuke1980/Program_Instraction#readme",
+  "description": "",
+  "dependencies": {
+    "class-validator": "^0.14.2"
+  }
+}

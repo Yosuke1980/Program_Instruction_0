@@ -1,0 +1,712 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ラジオ番組ドキュメント自動生成</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2rem;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+
+        .header p {
+            opacity: 0.9;
+            font-size: 1.1rem;
+        }
+
+        .main-content {
+            padding: 40px;
+        }
+
+        .program-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+            margin-bottom: 30px;
+        }
+
+        .program-card {
+            background: #f8fafc;
+            border: 2px solid #e2e8f0;
+            border-radius: 15px;
+            padding: 25px;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .program-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 4px;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+        }
+
+        .program-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.1);
+            border-color: #667eea;
+        }
+
+        .program-title {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 8px;
+        }
+
+        .program-description {
+            color: #718096;
+            font-size: 0.95rem;
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+
+        .btn {
+            width: 100%;
+            padding: 12px 20px;
+            border: none;
+            border-radius: 10px;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-primary:active {
+            transform: translateY(0);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .btn.loading {
+            color: transparent;
+        }
+
+        .btn.loading::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 20px;
+            height: 20px;
+            border: 2px solid transparent;
+            border-top: 2px solid white;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: translate(-50%, -50%) rotate(0deg); }
+            100% { transform: translate(-50%, -50%) rotate(360deg); }
+        }
+
+        .bulk-actions {
+            background: #f7fafc;
+            border: 2px dashed #cbd5e0;
+            border-radius: 15px;
+            padding: 25px;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .bulk-actions h3 {
+            color: #2d3748;
+            margin-bottom: 15px;
+            font-size: 1.2rem;
+        }
+
+        .btn-secondary {
+            background: #4a5568;
+            color: white;
+            margin: 0 10px;
+        }
+
+        .btn-secondary:hover {
+            background: #2d3748;
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(74, 85, 104, 0.3);
+        }
+
+        .results-section {
+            margin-top: 30px;
+        }
+
+        .results-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .results-title {
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: #2d3748;
+        }
+
+        .clear-btn {
+            background: #e53e3e;
+            color: white;
+            padding: 8px 16px;
+            border: none;
+            border-radius: 8px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+        .clear-btn:hover {
+            background: #c53030;
+        }
+
+        .results-container {
+            background: #f7fafc;
+            border-radius: 10px;
+            padding: 20px;
+            max-height: 400px;
+            overflow-y: auto;
+            border: 1px solid #e2e8f0;
+        }
+
+        .result-item {
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-left: 4px solid #48bb78;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .result-item.error {
+            border-left-color: #e53e3e;
+        }
+
+        .result-timestamp {
+            font-size: 0.85rem;
+            color: #718096;
+            margin-bottom: 8px;
+        }
+
+        .result-content {
+            color: #2d3748;
+            line-height: 1.5;
+        }
+
+        .result-content.error {
+            color: #e53e3e;
+        }
+
+        .empty-results {
+            text-align: center;
+            color: #a0aec0;
+            font-style: italic;
+            padding: 40px 20px;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                margin: 10px;
+                border-radius: 15px;
+            }
+
+            .header {
+                padding: 25px 20px;
+            }
+
+            .header h1 {
+                font-size: 1.6rem;
+            }
+
+            .main-content {
+                padding: 25px 20px;
+            }
+
+            .program-grid {
+                grid-template-columns: 1fr;
+                gap: 20px;
+            }
+
+            .bulk-actions {
+                padding: 20px;
+            }
+
+            .btn-secondary {
+                margin: 5px;
+                width: calc(50% - 10px);
+            }
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-success {
+            background-color: #48bb78;
+        }
+
+        .status-error {
+            background-color: #e53e3e;
+        }
+
+        .status-loading {
+            background-color: #ed8936;
+            animation: pulse 1.5s ease-in-out infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .program-status {
+            font-size: 0.85rem;
+            margin-top: 10px;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-weight: 600;
+        }
+
+        .status-ready {
+            background-color: #f0fff4;
+            color: #276749;
+            border: 1px solid #9ae6b4;
+        }
+
+        .status-processing {
+            background-color: #fffaf0;
+            color: #c05621;
+            border: 1px solid #f6ad55;
+        }
+
+        .status-completed {
+            background-color: #f0fff4;
+            color: #276749;
+            border: 1px solid #9ae6b4;
+        }
+
+        .status-failed {
+            background-color: #fed7d7;
+            color: #c53030;
+            border: 1px solid #feb2b2;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>📻 ラジオ番組ドキュメント自動生成</h1>
+            <p>番組別にWordドキュメントを自動生成してメール送信します</p>
+        </div>
+
+        <div class="main-content">
+            <!-- 番組別実行セクション -->
+            <div class="program-grid">
+                <div class="program-card">
+                    <div class="program-title">ちょうどいいラジオ</div>
+                    <div class="program-description">翌週分のドキュメントを生成します（月～木放送）</div>
+                    <button class="btn btn-primary" onclick="executeProgram('choudo')">
+                        生成実行
+                    </button>
+                    <div class="program-status status-ready" id="status-choudo">
+                        <span class="status-indicator status-success"></span>
+                        実行待機中
+                    </div>
+                </div>
+
+                <div class="program-card">
+                    <div class="program-title">PRIME TIME</div>
+                    <div class="program-description">翌週分のドキュメントを生成します（月～木放送）</div>
+                    <button class="btn btn-primary" onclick="executeProgram('primetime')">
+                        生成実行
+                    </button>
+                    <div class="program-status status-ready" id="status-primetime">
+                        <span class="status-indicator status-success"></span>
+                        実行待機中
+                    </div>
+                </div>
+
+                <div class="program-card">
+                    <div class="program-title">FLAG</div>
+                    <div class="program-description">今週からの4週間分ドキュメントを生成します（金曜放送）</div>
+                    <button class="btn btn-primary" onclick="executeProgram('flag')">
+                        生成実行
+                    </button>
+                    <div class="program-status status-ready" id="status-flag">
+                        <span class="status-indicator status-success"></span>
+                        実行待機中
+                    </div>
+                </div>
+
+                <div class="program-card">
+                    <div class="program-title">Route 847</div>
+                    <div class="program-description">今週分のドキュメントを生成します（土曜放送）</div>
+                    <button class="btn btn-primary" onclick="executeProgram('route847')">
+                        生成実行
+                    </button>
+                    <div class="program-status status-ready" id="status-route847">
+                        <span class="status-indicator status-success"></span>
+                        実行待機中
+                    </div>
+                </div>
+
+                <div class="program-card">
+                    <div class="program-title">God Bless Saturday</div>
+                    <div class="program-description">今週分のドキュメントを生成します（土曜放送）</div>
+                    <button class="btn btn-primary" onclick="executeProgram('godbless')">
+                        生成実行
+                    </button>
+                    <div class="program-status status-ready" id="status-godbless">
+                        <span class="status-indicator status-success"></span>
+                        実行待機中
+                    </div>
+                </div>
+            </div>
+
+            <div class="bulk-actions">
+                <h3>🚀 一括実行</h3>
+                <button class="btn btn-secondary" onclick="executeAllPrograms()">
+                    全番組実行
+                </button>
+                <button class="btn btn-secondary" onclick="testAllPrograms()">
+                    テスト実行
+                </button>
+                <button class="btn btn-secondary" onclick="checkConfiguration()">
+                    設定確認
+                </button>
+            </div>
+
+            <!-- 実行結果セクション -->
+            <div class="results-section">
+                <div class="results-header">
+                    <div class="results-title">📋 実行結果</div>
+                    <button class="clear-btn" onclick="clearResults()">
+                        クリア
+                    </button>
+                </div>
+                <div class="results-container" id="results">
+                    <div class="empty-results">
+                        まだ実行結果がありません
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // プログラム実行関数マッピング（WebApp用ラッパー関数）
+        const programFunctions = {
+            'choudo': 'webAppAutoGenerateChoudo',
+            'primetime': 'webAppAutoGeneratePrimeTime', 
+            'flag': 'webAppAutoGenerateFlag',
+            'route847': 'webAppAutoGenerateRoute847',
+            'godbless': 'webAppAutoGenerateGodBless'
+        };
+
+        const programNames = {
+            'choudo': 'ちょうどいいラジオ',
+            'primetime': 'PRIME TIME',
+            'flag': 'FLAG', 
+            'route847': 'Route 847',
+            'godbless': 'God Bless Saturday'
+        };
+
+        // 単一番組実行
+        function executeProgram(programKey) {
+            const button = event.target;
+            const statusEl = document.getElementById(`status-${programKey}`);
+            const functionName = programFunctions[programKey];
+            const programName = programNames[programKey];
+
+            // UI更新（実行中状態）
+            button.disabled = true;
+            button.classList.add('loading');
+            updateStatus(programKey, 'processing', '実行中...');
+
+            addResult(`${programName}の実行を開始しました`, 'info');
+
+            // Google Apps Script関数を実行
+            google.script.run
+                .withSuccessHandler((result) => {
+                    // 成功時の処理
+                    button.disabled = false;
+                    button.classList.remove('loading');
+                    updateStatus(programKey, 'completed', '実行完了');
+
+                    if (result && result.success) {
+                        addResult(`✅ ${programName}: ドキュメント生成完了\nDocx送信: ${result.docxSent ? '成功' : '失敗'}`, 'success');
+                        if (result.url) {
+                            addResult(`📄 ドキュメントURL: ${result.url}`, 'info');
+                        }
+                    } else {
+                        addResult(`⚠️ ${programName}: 実行は完了しましたが、詳細は要確認\n${result ? result.error || '結果の詳細が不明です' : '結果が返されませんでした'}`, 'warning');
+                        updateStatus(programKey, 'failed', '要確認');
+                    }
+                })
+                .withFailureHandler((error) => {
+                    // エラー時の処理
+                    button.disabled = false;
+                    button.classList.remove('loading');
+                    updateStatus(programKey, 'failed', '実行失敗');
+
+                    addResult(`❌ ${programName}: 実行エラー\n${error.message || error.toString()}`, 'error');
+                })
+                [functionName]();
+        }
+
+        // 全番組実行
+        function executeAllPrograms() {
+            addResult('🚀 全番組の一括実行を開始します', 'info');
+            
+            Object.keys(programFunctions).forEach((programKey, index) => {
+                setTimeout(() => {
+                    // 各番組のボタンを順番にクリック
+                    const button = document.querySelector(`[onclick="executeProgram('${programKey}')"]`);
+                    if (button && !button.disabled) {
+                        button.click();
+                    }
+                }, index * 2000); // 2秒間隔で実行
+            });
+        }
+
+        // テスト実行
+        function testAllPrograms() {
+            addResult('🧪 テスト実行を開始します', 'info');
+            
+            google.script.run
+                .withSuccessHandler((results) => {
+                    addResult('📊 テスト実行結果:', 'info');
+                    results.forEach(result => {
+                        const status = result.success ? '✅' : '❌';
+                        const docxStatus = result.docxSent ? ' (Docx送信成功)' : ' (Docx送信失敗)';
+                        addResult(`${status} ${result.program}: ${result.success ? '成功' : result.error}${result.success ? docxStatus : ''}`, result.success ? 'success' : 'error');
+                    });
+                })
+                .withFailureHandler((error) => {
+                    addResult(`❌ テスト実行エラー: ${error.message || error.toString()}`, 'error');
+                })
+                .webAppTestAllGeneration();
+        }
+
+        // 設定確認
+        function checkConfiguration() {
+            addResult('🔧 設定確認を開始します', 'info');
+            
+            google.script.run
+                .withSuccessHandler((config) => {
+                    addResult('📋 設定確認結果:', 'info');
+                    addResult(`スプレッドシートID: ${config.hasSpreadsheetId ? '✅ 設定済み' : '❌ 未設定'}`, config.hasSpreadsheetId ? 'success' : 'error');
+                    addResult(`カレンダーID: ${config.hasCalendarId ? '✅ 設定済み' : '❌ 未設定'}`, config.hasCalendarId ? 'success' : 'error');
+                    addResult(`楽曲スプレッドシートID: ${config.hasMusicSpreadsheetId ? '✅ 設定済み' : '❌ 未設定'}`, config.hasMusicSpreadsheetId ? 'success' : 'error');
+                    addResult(`メールアドレス: ${config.hasEmailAddress ? '✅ 設定済み' : '❌ 未設定'}`, config.hasEmailAddress ? 'success' : 'error');
+                    addResult(`ドキュメントテンプレート: ${config.hasDocumentTemplates ? `✅ ${config.templateCount}件設定済み` : '❌ 未設定'}`, config.hasDocumentTemplates ? 'success' : 'error');
+                    addResult(`出力フォルダ: ${config.hasOutputFolder ? '✅ 設定済み' : '❌ 未設定'}`, config.hasOutputFolder ? 'success' : 'error');
+                    addResult(`PORTSIDEカレンダー: ${config.hasPortsideCalendar ? '✅ 設定済み' : '⚠️ 未設定（オプション）'}`, config.hasPortsideCalendar ? 'success' : 'warning');
+                })
+                .withFailureHandler((error) => {
+                    addResult(`❌ 設定確認エラー: ${error.message || error.toString()}`, 'error');
+                })
+                .webAppGetConfigInfo();
+        }
+
+        // ステータス更新
+        function updateStatus(programKey, status, text) {
+            const statusEl = document.getElementById(`status-${programKey}`);
+            const indicator = statusEl.querySelector('.status-indicator');
+            
+            // クラスをリセット
+            statusEl.className = 'program-status';
+            indicator.className = 'status-indicator';
+            
+            // 新しいクラスを追加
+            switch(status) {
+                case 'processing':
+                    statusEl.classList.add('status-processing');
+                    indicator.classList.add('status-loading');
+                    break;
+                case 'completed':
+                    statusEl.classList.add('status-completed');
+                    indicator.classList.add('status-success');
+                    break;
+                case 'failed':
+                    statusEl.classList.add('status-failed');
+                    indicator.classList.add('status-error');
+                    break;
+                default:
+                    statusEl.classList.add('status-ready');
+                    indicator.classList.add('status-success');
+            }
+            
+            statusEl.innerHTML = `<span class="${indicator.className}"></span>${text}`;
+        }
+
+        // 結果表示
+        function addResult(message, type = 'info') {
+            const resultsContainer = document.getElementById('results');
+            
+            // 空の結果メッセージを削除
+            const emptyMessage = resultsContainer.querySelector('.empty-results');
+            if (emptyMessage) {
+                emptyMessage.remove();
+            }
+
+            const resultItem = document.createElement('div');
+            resultItem.className = `result-item ${type === 'error' || type === 'warning' ? 'error' : ''}`;
+            
+            const timestamp = new Date().toLocaleString('ja-JP');
+            resultItem.innerHTML = `
+                <div class="result-timestamp">${timestamp}</div>
+                <div class="result-content ${type === 'error' ? 'error' : ''}">${message.replace(/\n/g, '<br>')}</div>
+            `;
+
+            resultsContainer.insertBefore(resultItem, resultsContainer.firstChild);
+            
+            // 最新の結果までスクロール
+            resultsContainer.scrollTop = 0;
+        }
+
+        // 結果クリア
+        function clearResults() {
+            const resultsContainer = document.getElementById('results');
+            resultsContainer.innerHTML = '<div class="empty-results">まだ実行結果がありません</div>';
+        }
+
+        // 初期化
+        document.addEventListener('DOMContentLoaded', function() {
+            addResult('📻 ラジオ番組ドキュメント自動生成アプリが準備完了しました', 'info');
+            
+            // 初期設定確認（サイレント実行）
+            setTimeout(() => {
+                google.script.run
+                    .withSuccessHandler((config) => {
+                        const allConfigured = config.hasSpreadsheetId && config.hasCalendarId && 
+                                            config.hasEmailAddress && config.hasDocumentTemplates && 
+                                            config.hasOutputFolder;
+                        
+                        if (allConfigured) {
+                            addResult('✅ 基本設定は正常に構成されています', 'success');
+                        } else {
+                            addResult('⚠️ 一部の設定が不完全です。「設定確認」ボタンで詳細を確認してください', 'warning');
+                        }
+                    })
+                    .withFailureHandler((error) => {
+                        addResult('⚠️ 初期設定確認でエラーが発生しました。設定を確認してください', 'warning');
+                    })
+                    .webAppGetConfigInfo();
+            }, 1000);
+        });
+
+        // Google Apps Script用のstub（実際の環境では不要）
+        if (typeof google === 'undefined') {
+            window.google = {
+                script: {
+                    run: {
+                        withSuccessHandler: function(callback) {
+                            return {
+                                withFailureHandler: function(errorCallback) {
+                                    return {
+                                        webAppAutoGenerateChoudo: () => {
+                                            setTimeout(() => callback({success: true, docxSent: true, url: 'https://docs.google.com/document/d/test'}), 2000);
+                                        },
+                                        webAppAutoGeneratePrimeTime: () => {
+                                            setTimeout(() => callback({success: true, docxSent: true}), 2000);
+                                        },
+                                        webAppAutoGenerateFlag: () => {
+                                            setTimeout(() => callback({success: true, docxSent: false}), 2000);
+                                        },
+                                        webAppAutoGenerateRoute847: () => {
+                                            setTimeout(() => callback({success: true, docxSent: true}), 2000);
+                                        },
+                                        webAppAutoGenerateGodBless: () => {
+                                            setTimeout(() => callback({success: true, docxSent: true}), 2000);
+                                        },
+                                        webAppTestAllGeneration: () => {
+                                            setTimeout(() => callback([
+                                                {program: 'ちょうどいいラジオ', success: true, docxSent: true},
+                                                {program: 'PRIME TIME', success: true, docxSent: true},
+                                                {program: 'FLAG', success: false, error: 'テストエラー', docxSent: false},
+                                                {program: 'Route 847', success: true, docxSent: true},
+                                                {program: 'God Bless Saturday', success: true, docxSent: true}
+                                            ]), 3000);
+                                        },
+                                        webAppGetConfigInfo: () => {
+                                            setTimeout(() => callback({
+                                                hasSpreadsheetId: true,
+                                                hasCalendarId: true,
+                                                hasMusicSpreadsheetId: true,
+                                                musicSheetName: 'シート1',
+                                                hasEmailAddress: true,
+                                                hasDocumentTemplates: true,
+                                                templateCount: 5,
+                                                hasOutputFolder: true,
+                                                hasPortsideCalendar: true
+                                            }), 1000);
+                                        }
+                                    };
+                                }
+                            };
+                        }
+                    }
+                }
+            };
+        }
+    </script>
+</body>
+</html>
