@@ -18,7 +18,11 @@ const CONFIG = {
   DOCUMENT_OUTPUT_FOLDER_ID: '1-YJXe7YJzevvUUrcp-VlEyKO3YHLH4qf',
   
   // PORTSIDE専用カレンダー
-  PORTSIDE_CALENDAR_ID: 'c_a25ffe304a25338178cd461a7b159103bd46ea62c64e773fdf4c61b4b36ab2fc@group.calendar.google.com'
+  PORTSIDE_CALENDAR_ID: 'c_a25ffe304a25338178cd461a7b159103bd46ea62c64e773fdf4c61b4b36ab2fc@group.calendar.google.com',
+  
+  // 番組メタデータ管理用スプレッドシート
+  METADATA_SPREADSHEET_ID: '1r6GLEvsZiqb3vkXZmrZ7XCpvW4RcecC7Bfp9YzhnQUE', // 同じスプレッドシートを使用
+  METADATA_SHEET_NAME: '番組メタデータ'
 };
 
 // 型定義
@@ -46,6 +50,24 @@ interface WeeklySchedule {
   friday: MusicItem[];
   saturday: MusicItem[];
   sunday: MusicItem[];
+}
+
+// メタデータ管理用インターフェース
+interface ProgramMetadataRow {
+  programId: string;
+  name: string;
+  regularSlots: string;
+  hosts: string;
+  productionCompany: string;
+  startDate: string;
+  genre: string;
+  publicityFrames: string;
+  reportFrames: string;
+  callFrames: string;
+  specialFrames: string;
+  notes: string;
+  lastUpdated: string;
+  createdAt: string;
 }
 
 interface DateRange {
@@ -303,6 +325,403 @@ function webAppGetConfigInfo() {
     console.error('WebApp: 設定情報取得エラー', error);
     return {
       success: false,
+      error: error.toString(),
+      timestamp: new Date().toISOString()
+    };
+  }
+}
+
+/**
+ * WebApp用の番組データ取得関数
+ */
+function webAppGetProgramData(programName: string, weekType: string = 'thisWeek') {
+  try {
+    console.log(`WebApp: 番組データ取得開始 - ${programName} (${weekType})`);
+    
+    let result;
+    
+    switch (weekType) {
+      case 'thisWeek':
+        result = webAppGetProgramDataThisWeek(programName);
+        break;
+      case 'nextWeek':
+        result = webAppGetProgramDataNextWeek(programName);
+        break;
+      default:
+        throw new Error(`無効な週タイプ: ${weekType}`);
+    }
+    
+    if (result && result.success) {
+      console.log(`WebApp: 番組データ取得成功 - ${programName}`);
+      return {
+        success: true,
+        programName: programName,
+        weekType: weekType,
+        data: result.weekResults || {},
+        sheetName: result.sheetName,
+        timestamp: new Date().toISOString()
+      };
+    } else {
+      throw new Error(result ? result.error : '不明なエラー');
+    }
+  } catch (error: unknown) {
+    console.error(`WebApp: 番組データ取得エラー - ${programName}`, error);
+    return {
+      success: false,
+      programName: programName,
+      weekType: weekType,
+      error: error.toString(),
+      timestamp: new Date().toISOString()
+    };
+  }
+}
+
+/**
+ * WebApp用の番組データ取得関数（今週分）
+ */
+function webAppGetProgramDataThisWeek(programName: string) {
+  try {
+    console.log(`WebApp: 番組データ取得開始（今週） - ${programName}`);
+    
+    const config = getConfig();
+    const spreadsheet = SpreadsheetApp.openById(config.SPREADSHEET_ID);
+    const thisWeekSheet = getSheetByWeek(spreadsheet, 0);
+    
+    if (!thisWeekSheet) {
+      throw new Error('今週のシートが見つかりません');
+    }
+    
+    console.log(`使用シート: ${thisWeekSheet.getName()}`);
+    
+    // 今週のデータを抽出（プログラム優先構造）
+    const rawWeekData = extractStructuredWeekData(thisWeekSheet);
+    console.log(`抽出されたデータの番組名:`, Object.keys(rawWeekData || {}));
+    
+    if (!rawWeekData) {
+      throw new Error('週データの抽出に失敗しました');
+    }
+    
+    // プログラム優先を曜日優先に変換
+    const weekData = transformProgramDataToWeekData(rawWeekData);
+    console.log(`変換後のデータ構造:`, Object.keys(weekData || {}));
+    
+    // 指定番組が任意の曜日に存在するかチェック
+    let programFound = false;
+    for (const [day, dayData] of Object.entries(weekData)) {
+      if (dayData && typeof dayData === 'object' && dayData[programName]) {
+        programFound = true;
+        break;
+      }
+    }
+    
+    if (!programFound) {
+      console.error(`${programName}のデータが見つかりません。利用可能な番組:`, Object.keys(rawWeekData));
+      throw new Error(`${programName}のデータが見つかりません。利用可能な番組: ${Object.keys(rawWeekData).join(', ')}`);
+    }
+    
+    console.log(`WebApp: 番組データ取得成功（今週） - ${programName}`);
+    return {
+      success: true,
+      programName: programName,
+      weekType: 'thisWeek',
+      weekResults: weekData,
+      sheetName: thisWeekSheet.getName(),
+      timestamp: new Date().toISOString()
+    };
+    
+  } catch (error: unknown) {
+    console.error(`WebApp: 番組データ取得エラー（今週） - ${programName}`, error);
+    return {
+      success: false,
+      programName: programName,
+      weekType: 'thisWeek',
+      error: error.toString(),
+      timestamp: new Date().toISOString()
+    };
+  }
+}
+
+/**
+ * WebApp用の番組データ取得関数（翌週分）
+ */
+function webAppGetProgramDataNextWeek(programName: string) {
+  try {
+    console.log(`WebApp: 番組データ取得開始（翌週） - ${programName}`);
+    
+    const config = getConfig();
+    const spreadsheet = SpreadsheetApp.openById(config.SPREADSHEET_ID);
+    const nextWeekSheet = getSheetByWeek(spreadsheet, 1);
+    
+    if (!nextWeekSheet) {
+      throw new Error('翌週のシートが見つかりません');
+    }
+    
+    console.log(`使用シート: ${nextWeekSheet.getName()}`);
+    
+    // 翌週のデータを抽出（プログラム優先構造）
+    const rawWeekData = extractStructuredWeekData(nextWeekSheet);
+    console.log(`抽出されたデータの番組名:`, Object.keys(rawWeekData || {}));
+    
+    if (!rawWeekData) {
+      throw new Error('週データの抽出に失敗しました');
+    }
+    
+    // プログラム優先を曜日優先に変換
+    const weekData = transformProgramDataToWeekData(rawWeekData);
+    console.log(`変換後のデータ構造:`, Object.keys(weekData || {}));
+    
+    // 指定番組が任意の曜日に存在するかチェック
+    let programFound = false;
+    for (const [day, dayData] of Object.entries(weekData)) {
+      if (dayData && typeof dayData === 'object' && dayData[programName]) {
+        programFound = true;
+        break;
+      }
+    }
+    
+    if (!programFound) {
+      console.error(`${programName}のデータが見つかりません。利用可能な番組:`, Object.keys(rawWeekData));
+      throw new Error(`${programName}のデータが見つかりません。利用可能な番組: ${Object.keys(rawWeekData).join(', ')}`);
+    }
+    
+    console.log(`WebApp: 番組データ取得成功（翌週） - ${programName}`);
+    return {
+      success: true,
+      programName: programName,
+      weekType: 'nextWeek',
+      weekResults: weekData,
+      sheetName: nextWeekSheet.getName(),
+      timestamp: new Date().toISOString()
+    };
+    
+  } catch (error: unknown) {
+    console.error(`WebApp: 番組データ取得エラー（翌週） - ${programName}`, error);
+    return {
+      success: false,
+      programName: programName,
+      weekType: 'nextWeek',
+      error: error.toString(),
+      timestamp: new Date().toISOString()
+    };
+  }
+}
+
+/**
+ * プログラム優先のデータ構造を曜日優先に変換する関数
+ */
+function transformProgramDataToWeekData(programData: any): any {
+  const weekData: any = {};
+  
+  // プログラムデータを曜日ごとに再構成
+  for (const [programName, programDays] of Object.entries(programData)) {
+    if (programDays && typeof programDays === 'object') {
+      for (const [day, dayData] of Object.entries(programDays)) {
+        if (!weekData[day]) {
+          weekData[day] = {};
+        }
+        weekData[day][programName] = dayData;
+      }
+    }
+  }
+  
+  return weekData;
+}
+
+/**
+ * 指定番組のみをフィルタリングして返す関数
+ */
+function webAppGetFilteredProgramData(programName: string, weekType: 'thisWeek' | 'nextWeek') {
+  try {
+    // 元のデータを取得
+    const rawData = weekType === 'thisWeek' 
+      ? webAppGetProgramDataThisWeek(programName)
+      : webAppGetProgramDataNextWeek(programName);
+      
+    if (!rawData.success) return rawData;
+    
+    // 指定番組のみをフィルタリング
+    const filteredResults: any = {};
+    for (const [day, dayData] of Object.entries(rawData.weekResults)) {
+      if (dayData && typeof dayData === 'object' && dayData[programName]) {
+        filteredResults[day] = { [programName]: dayData[programName] };
+      }
+    }
+    
+    return {
+      ...rawData,
+      weekResults: filteredResults,
+      filtered: true
+    };
+  } catch (error: unknown) {
+    console.error(`WebApp: フィルタリングエラー - ${programName}`, error);
+    return {
+      success: false,
+      programName: programName,
+      weekType: weekType,
+      error: error.toString(),
+      timestamp: new Date().toISOString()
+    };
+  }
+}
+
+/**
+ * 楽曲データを簡素化する関数
+ */
+function simplifyMusicData(musicData: any): string[] {
+  if (!musicData) return ["ー"];
+  
+  // 文字列の場合
+  if (typeof musicData === 'string') {
+    if (musicData === 'ー' || musicData.trim() === '') return ["ー"];
+    return musicData.split('♪')
+      .filter(song => song.trim())
+      .map(song => song.trim().replace(/[0-9０-９①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳⑴⑵⑶⑷⑸⑹⑺⑻⑼⑽⑾⑿⒀⒁⒂⒃⒄⒅⒆⒇㈠㈡㈢㈣㈤㈥㈦㈧㈨㈩]/g, '').replace(/♪/g, '').trim())
+      .filter(song => song && song !== 'ー');
+  }
+  
+  // 配列の場合
+  if (Array.isArray(musicData)) {
+    const songs = musicData.map(item => {
+      if (typeof item === 'object' && item && item.曲名) {
+        return item.曲名;
+      }
+      if (typeof item === 'string') {
+        return item.replace(/[0-9０-９①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳⑴⑵⑶⑷⑸⑹⑺⑻⑼⑽⑾⑿⒀⒁⒂⒃⒄⒅⒆⒇㈠㈡㈢㈣㈤㈥㈦㈧㈨㈩]/g, '').replace(/♪/g, '').trim();
+      }
+      return String(item).trim();
+    }).filter(song => song && song !== 'ー');
+    
+    return songs.length > 0 ? songs : ["ー"];
+  }
+  
+  // オブジェクトの場合
+  if (typeof musicData === 'object' && musicData.曲名) {
+    return [musicData.曲名];
+  }
+  
+  return ["ー"];
+}
+
+/**
+ * 時間指定告知を抽出
+ */
+function extractTimedAnnouncements(programData: any): any[] {
+  const timedFields = [
+    '7:28パブ告知', '19:41Traffic', '19:43', '20:51', '12:40 電話パブ', 
+    '13:29 パブリシティ', '13:40 パブリシティ', '12:15 リポート案件', 
+    '14:29 リポート案件', '14:41パブ', 'リポート 16:47', '営業パブ 17:41'
+  ];
+  
+  const announcements: any[] = [];
+  for (const field of timedFields) {
+    if (programData[field] && programData[field] !== 'ー') {
+      announcements.push({
+        time: field,
+        content: Array.isArray(programData[field]) ? programData[field] : [programData[field]]
+      });
+    }
+  }
+  
+  return announcements;
+}
+
+/**
+ * 一般告知を抽出
+ */
+function extractGeneralAnnouncements(programData: any): string[] {
+  const generalFields = ['時間指定なし告知', '時間指定なしパブ'];
+  const announcements: string[] = [];
+  
+  for (const field of generalFields) {
+    if (programData[field] && programData[field] !== 'ー') {
+      if (Array.isArray(programData[field])) {
+        announcements.push(...programData[field]);
+      } else {
+        announcements.push(programData[field]);
+      }
+    }
+  }
+  
+  return announcements.length > 0 ? announcements : ["ー"];
+}
+
+/**
+ * コマーシャル関連データを抽出
+ */
+function extractCommercials(programData: any): any {
+  return {
+    radioShopping: programData['ラジオショッピング'] || ["ー"],
+    happiness: programData['はぴねすくらぶ'] || ["ー"],
+    business: programData['営業コーナー'] || ["ー"]
+  };
+}
+
+/**
+ * リポート関連データを抽出
+ */
+function extractReports(programData: any): any[] {
+  const reportFields = ['12:15 リポート案件', '14:29 リポート案件', 'リポート 16:47'];
+  const reports: any[] = [];
+  
+  for (const field of reportFields) {
+    if (programData[field] && programData[field] !== 'ー') {
+      reports.push({
+        time: field,
+        content: Array.isArray(programData[field]) ? programData[field] : [programData[field]]
+      });
+    }
+  }
+  
+  return reports;
+}
+
+/**
+ * 簡素化された番組データを返す関数
+ */
+function webAppGetSimplifiedProgramData(programName: string, weekType: 'thisWeek' | 'nextWeek') {
+  try {
+    const filteredData = webAppGetFilteredProgramData(programName, weekType);
+    if (!filteredData.success) return filteredData;
+    
+    const simplifiedResults: any = {};
+    
+    for (const [day, dayData] of Object.entries(filteredData.weekResults)) {
+      if (dayData && typeof dayData === 'object' && dayData[programName]) {
+        const programData = dayData[programName];
+        simplifiedResults[day] = {
+          date: programData.日付 || "ー",
+          music: simplifyMusicData(programData.楽曲),
+          guests: Array.isArray(programData.ゲスト) ? programData.ゲスト.filter(g => g && g !== 'ー') : 
+                  (programData.ゲスト && programData.ゲスト !== 'ー' ? [programData.ゲスト] : ["ー"]),
+          announcements: {
+            timed: extractTimedAnnouncements(programData),
+            general: extractGeneralAnnouncements(programData)
+          },
+          commercials: extractCommercials(programData),
+          reports: extractReports(programData),
+          reservations: {
+            advance: programData['先行予約'] || ["ー"],
+            limited: programData['限定予約'] || ["ー"]
+          },
+          designated: programData['指定曲'] || ["ー"]
+        };
+      }
+    }
+    
+    return {
+      success: true,
+      programName,
+      weekType,
+      data: simplifiedResults,
+      simplified: true,
+      timestamp: new Date().toISOString()
+    };
+  } catch (error: unknown) {
+    console.error(`WebApp: 簡素化エラー - ${programName}`, error);
+    return {
+      success: false,
+      programName: programName,
+      weekType: weekType,
       error: error.toString(),
       timestamp: new Date().toISOString()
     };
@@ -5628,5 +6047,1489 @@ function testWeek2SheetCalculation() {
   }
   
   console.log('\n=== シート名計算テスト完了 ===');
+}
+
+// ======================
+// JSON整形関数の実装
+// ======================
+
+/**
+ * JSON出力用の型定義
+ */
+interface ProgramDataJSON {
+  period: {
+    from: string;
+    to: string;
+    label: string;
+  };
+  commonNotices: {
+    permanent: Array<{
+      time: string | null;
+      label: string;
+      notes: string;
+    }>;
+    weekly: Array<{
+      time: string | null;
+      label: string;
+      notes: string;
+    }>;
+  };
+  programs: {
+    [programId: string]: {
+      episodes: Array<{
+        date: string;
+        weekday: string;
+        songs: Array<{
+          title: string;
+          url: string;
+          notes: string;
+        }>;
+        reservations: Array<{
+          time: string | null;
+          label: string;
+          notes: string;
+        }>;
+        publicitySlots: Array<{
+          time: string;
+          mode: string;
+          label: string;
+          reporter?: string;
+          guest?: string | null;
+          location?: string | null;
+          contact?: {
+            tel: string | null;
+            note: string;
+          };
+        }>;
+        timeFreePublicity: Array<{
+          label: string;
+        }>;
+        announcements: Array<{
+          time?: string | null;
+          label: string;
+        }>;
+        shopping: string[];
+        happinessClub: string[];
+        yokohamaPortside: any[];
+        specialSlots: Array<{
+          label: string;
+          value: string;
+        }>;
+        reportSlots: Array<{
+          time: string;
+          label: string;
+        }>;
+        others: Array<{
+          time: string | null;
+          label: string;
+        }>;
+      }>;
+      recordings: Array<{
+        title: string;
+        slots: string[];
+      }>;
+    };
+  };
+}
+
+/**
+ * ProgramDataを構造化されたJSONフォーマットに変換する関数
+ */
+function formatProgramDataAsJSON(allResults: any): ProgramDataJSON {
+  try {
+    console.log('JSON形式への変換開始');
+    
+    if (!allResults || typeof allResults !== 'object') {
+      throw new Error('無効なデータが渡されました');
+    }
+
+    const period = extractPeriodInfo(allResults);
+    const commonNotices = extractCommonNotices(allResults);
+    const programs = transformToProgramStructure(allResults);
+
+    const result: ProgramDataJSON = {
+      period,
+      commonNotices,
+      programs
+    };
+
+    console.log('JSON変換完了');
+    return result;
+
+  } catch (error: unknown) {
+    console.error('JSON変換エラー:', error);
+    throw error;
+  }
+}
+
+/**
+ * 期間情報を抽出
+ */
+function extractPeriodInfo(allResults: any): ProgramDataJSON['period'] {
+  const today = new Date();
+  const nextWeek = new Date(today);
+  nextWeek.setDate(today.getDate() + 7);
+  
+  return {
+    from: formatDateString(today),
+    to: formatDateString(nextWeek),
+    label: `${formatDateLabel(today)}-${formatDateLabel(nextWeek)}`
+  };
+}
+
+/**
+ * 共通通知を抽出
+ */
+function extractCommonNotices(allResults: any): ProgramDataJSON['commonNotices'] {
+  return {
+    permanent: [
+      {
+        time: null,
+        label: "災害時は全番組で緊急割り込み対応を優先",
+        notes: "局全体マニュアルに従う"
+      },
+      {
+        time: null,
+        label: "飲料パブはレポートNG",
+        notes: "全番組共通ルール"
+      }
+    ],
+    weekly: [
+      {
+        time: null,
+        label: "FMヨコハマ40周年関連の告知／SPOT運用",
+        notes: "今週は『開局ライブSPOT出し』『40thライブ告知解禁』『合同演奏会SPOT出し②』等"
+      }
+    ]
+  };
+}
+
+/**
+ * 番組構造に変換
+ */
+function transformToProgramStructure(allResults: any): ProgramDataJSON['programs'] {
+  const programs: ProgramDataJSON['programs'] = {};
+  
+  Object.keys(allResults).forEach(weekKey => {
+    const weekData = allResults[weekKey];
+    if (!weekData || typeof weekData !== 'object') return;
+    
+    Object.keys(weekData).forEach(dayKey => {
+      if (dayKey === 'period') return;
+      
+      const dayData = weekData[dayKey];
+      if (!dayData || typeof dayData !== 'object') return;
+      
+      Object.keys(dayData).forEach(programKey => {
+        if (!programs[programKey]) {
+          programs[programKey] = {
+            episodes: [],
+            recordings: []
+          };
+        }
+        
+        const programData = dayData[programKey];
+        if (programData && typeof programData === 'object') {
+          const episode = convertToEpisodeFormat(programData, dayKey, weekKey);
+          if (episode) {
+            programs[programKey].episodes.push(episode);
+          }
+        }
+      });
+    });
+  });
+  
+  return programs;
+}
+
+/**
+ * エピソード形式に変換
+ */
+function convertToEpisodeFormat(programData: any, dayKey: string, weekKey: string): any {
+  const dateInfo = calculateDateFromKeys(dayKey, weekKey);
+  
+  return {
+    date: dateInfo.date,
+    weekday: dateInfo.weekday,
+    songs: extractSongs(programData),
+    reservations: extractReservations(programData),
+    publicitySlots: extractPublicitySlots(programData),
+    timeFreePublicity: extractTimeFreePublicity(programData),
+    announcements: extractAnnouncements(programData),
+    shopping: extractShopping(programData),
+    happinessClub: extractHappinessClub(programData),
+    yokohamaPortside: extractYokohamaPortside(programData),
+    specialSlots: extractSpecialSlots(programData),
+    reportSlots: extractReportSlots(programData),
+    others: extractOthers(programData)
+  };
+}
+
+/**
+ * 楽曲情報を抽出
+ */
+function extractSongs(programData: any): Array<{title: string, url: string, notes: string}> {
+  const songs: Array<{title: string, url: string, notes: string}> = [];
+  
+  if (programData.songs && Array.isArray(programData.songs)) {
+    programData.songs.forEach((song: any) => {
+      if (typeof song === 'string') {
+        songs.push({
+          title: song,
+          url: "",
+          notes: ""
+        });
+      } else if (song && typeof song === 'object') {
+        songs.push({
+          title: song.title || song.name || "",
+          url: song.url || "",
+          notes: song.notes || song.memo || ""
+        });
+      }
+    });
+  }
+  
+  return songs;
+}
+
+/**
+ * 予約情報を抽出
+ */
+function extractReservations(programData: any): Array<{time: string | null, label: string, notes: string}> {
+  const reservations: Array<{time: string | null, label: string, notes: string}> = [];
+  
+  if (programData.reservations && Array.isArray(programData.reservations)) {
+    programData.reservations.forEach((item: any) => {
+      if (typeof item === 'string') {
+        reservations.push({
+          time: null,
+          label: item,
+          notes: ""
+        });
+      } else if (item && typeof item === 'object') {
+        reservations.push({
+          time: item.time || null,
+          label: item.label || item.content || "",
+          notes: item.notes || ""
+        });
+      }
+    });
+  }
+  
+  return reservations;
+}
+
+/**
+ * パブリシティ枠を抽出
+ */
+function extractPublicitySlots(programData: any): Array<any> {
+  const slots: Array<any> = [];
+  
+  if (programData.publicitySlots && Array.isArray(programData.publicitySlots)) {
+    programData.publicitySlots.forEach((slot: any) => {
+      if (slot && typeof slot === 'object') {
+        const converted: any = {
+          time: slot.time || "",
+          mode: slot.mode || "none",
+          label: slot.label || ""
+        };
+        
+        if (slot.reporter) converted.reporter = slot.reporter;
+        if (slot.guest !== undefined) converted.guest = slot.guest;
+        if (slot.location !== undefined) converted.location = slot.location;
+        if (slot.contact) converted.contact = slot.contact;
+        
+        slots.push(converted);
+      }
+    });
+  }
+  
+  return slots;
+}
+
+/**
+ * フリータイム パブリシティを抽出
+ */
+function extractTimeFreePublicity(programData: any): Array<{label: string}> {
+  const items: Array<{label: string}> = [];
+  
+  if (programData.timeFreePublicity && Array.isArray(programData.timeFreePublicity)) {
+    programData.timeFreePublicity.forEach((item: any) => {
+      if (typeof item === 'string') {
+        items.push({ label: item });
+      } else if (item && typeof item === 'object' && item.label) {
+        items.push({ label: item.label });
+      }
+    });
+  }
+  
+  return items;
+}
+
+/**
+ * アナウンス情報を抽出
+ */
+function extractAnnouncements(programData: any): Array<{time?: string | null, label: string}> {
+  const announcements: Array<{time?: string | null, label: string}> = [];
+  
+  if (programData.announcements && Array.isArray(programData.announcements)) {
+    programData.announcements.forEach((item: any) => {
+      if (typeof item === 'string') {
+        announcements.push({ label: item });
+      } else if (item && typeof item === 'object') {
+        const converted: any = { label: item.label || item.content || "" };
+        if (item.time !== undefined) converted.time = item.time;
+        announcements.push(converted);
+      }
+    });
+  }
+  
+  return announcements;
+}
+
+/**
+ * ショッピング情報を抽出
+ */
+function extractShopping(programData: any): string[] {
+  if (programData.shopping && Array.isArray(programData.shopping)) {
+    return programData.shopping.filter((item: any) => typeof item === 'string');
+  }
+  return [];
+}
+
+/**
+ * ハピネスクラブ情報を抽出
+ */
+function extractHappinessClub(programData: any): string[] {
+  if (programData.happinessClub && Array.isArray(programData.happinessClub)) {
+    return programData.happinessClub.filter((item: any) => typeof item === 'string');
+  }
+  return [];
+}
+
+/**
+ * ヨコハマポートサイド情報を抽出
+ */
+function extractYokohamaPortside(programData: any): any[] {
+  if (programData.yokohamaPortside && Array.isArray(programData.yokohamaPortside)) {
+    return programData.yokohamaPortside;
+  }
+  return [];
+}
+
+/**
+ * 特別枠を抽出
+ */
+function extractSpecialSlots(programData: any): Array<{label: string, value: string}> {
+  const slots: Array<{label: string, value: string}> = [];
+  
+  if (programData.specialSlots && Array.isArray(programData.specialSlots)) {
+    programData.specialSlots.forEach((slot: any) => {
+      if (slot && typeof slot === 'object' && slot.label && slot.value) {
+        slots.push({
+          label: slot.label,
+          value: slot.value
+        });
+      }
+    });
+  }
+  
+  return slots;
+}
+
+/**
+ * レポート枠を抽出
+ */
+function extractReportSlots(programData: any): Array<{time: string, label: string}> {
+  const slots: Array<{time: string, label: string}> = [];
+  
+  if (programData.reportSlots && Array.isArray(programData.reportSlots)) {
+    programData.reportSlots.forEach((slot: any) => {
+      if (slot && typeof slot === 'object' && slot.time && slot.label) {
+        slots.push({
+          time: slot.time,
+          label: slot.label
+        });
+      }
+    });
+  }
+  
+  return slots;
+}
+
+/**
+ * その他情報を抽出
+ */
+function extractOthers(programData: any): Array<{time: string | null, label: string}> {
+  const others: Array<{time: string | null, label: string}> = [];
+  
+  if (programData.others && Array.isArray(programData.others)) {
+    programData.others.forEach((item: any) => {
+      if (typeof item === 'string') {
+        others.push({
+          time: null,
+          label: item
+        });
+      } else if (item && typeof item === 'object') {
+        others.push({
+          time: item.time || null,
+          label: item.label || item.content || ""
+        });
+      }
+    });
+  }
+  
+  return others;
+}
+
+/**
+ * 日付文字列をフォーマット (YYYY-MM-DD)
+ */
+function formatDateString(date: Date): string {
+  const year = date.getFullYear();
+  const month = (date.getMonth() + 1).toString().padStart(2, '0');
+  const day = date.getDate().toString().padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * 日付ラベルをフォーマット (YY.M.D)
+ */
+function formatDateLabel(date: Date): string {
+  const year = date.getFullYear().toString().slice(-2);
+  const month = date.getMonth() + 1;
+  const day = date.getDate();
+  return `${year}.${month}.${day}`;
+}
+
+/**
+ * キーから日付情報を算出
+ */
+function calculateDateFromKeys(dayKey: string, weekKey: string): {date: string, weekday: string} {
+  const today = new Date();
+  const weekdays = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  const weekdayIndex = weekdays.indexOf(dayKey.toLowerCase());
+  
+  if (weekdayIndex === -1) {
+    return {
+      date: formatDateString(today),
+      weekday: 'unknown'
+    };
+  }
+  
+  let weekOffset = 0;
+  if (weekKey.includes('翌週')) weekOffset = 1;
+  else if (weekKey.includes('翌々週')) weekOffset = 2;
+  
+  const targetDate = new Date(today);
+  const currentWeekday = today.getDay();
+  const daysDiff = weekdayIndex - currentWeekday + (weekOffset * 7);
+  targetDate.setDate(today.getDate() + daysDiff);
+  
+  return {
+    date: formatDateString(targetDate),
+    weekday: dayKey.toLowerCase()
+  };
+}
+
+/**
+ * WebApp用のJSON形式番組データ取得関数
+ */
+function webAppGetProgramDataAsJSON(programName?: string, weekType: string = 'thisWeek') {
+  try {
+    console.log('JSON形式番組データ取得開始');
+    
+    let allResults: any;
+    
+    if (programName) {
+      const result = weekType === 'thisWeek' 
+        ? webAppGetProgramDataThisWeek(programName)
+        : webAppGetProgramDataNextWeek(programName);
+      
+      if (!result.success) {
+        return {
+          success: false,
+          error: result.error || 'データ取得に失敗しました'
+        };
+      }
+      
+      allResults = result.weekResults;
+    } else {
+      allResults = weekType === 'thisWeek' 
+        ? extractRadioSchedule()
+        : extractRadioScheduleByProgram();
+    }
+    
+    const jsonData = formatProgramDataAsJSON(allResults);
+    
+    return {
+      success: true,
+      data: jsonData,
+      formatted: JSON.stringify(jsonData, null, 2)
+    };
+    
+  } catch (error: unknown) {
+    console.error('JSON形式データ取得エラー:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+
+/**
+ * JSON形式データのテスト関数
+ */
+function testWebAppGetProgramDataAsJSON() {
+  try {
+    console.log('=== JSON形式データ取得テスト開始 ===');
+    
+    // テスト1: 全番組データのJSON形式取得
+    console.log('\n【テスト1】全番組データのJSON形式取得');
+    const allDataResult = webAppGetProgramDataAsJSON();
+    
+    if (allDataResult.success) {
+      console.log('✓ 全番組データのJSON変換成功');
+      console.log('データ構造:', Object.keys(allDataResult.data || {}));
+      console.log('JSON形式データ取得完了 (文字数:', allDataResult.formatted?.length || 0, ')');
+    } else {
+      console.error('✗ 全番組データのJSON変換失敗:', allDataResult.error);
+    }
+    
+    // テスト2: 特定番組データのJSON形式取得
+    console.log('\n【テスト2】特定番組データのJSON形式取得 - CHOICES');
+    const choicesResult = webAppGetProgramDataAsJSON('CHOICES');
+    
+    if (choicesResult.success) {
+      console.log('✓ CHOICES番組データのJSON変換成功');
+      const programCount = Object.keys(choicesResult.data?.programs || {}).length;
+      console.log('取得された番組数:', programCount);
+    } else {
+      console.error('✗ CHOICES番組データのJSON変換失敗:', choicesResult.error);
+    }
+    
+    // テスト3: 翌週データのJSON形式取得
+    console.log('\n【テスト3】翌週データのJSON形式取得');
+    const nextWeekResult = webAppGetProgramDataAsJSON(undefined, 'nextWeek');
+    
+    if (nextWeekResult.success) {
+      console.log('✓ 翌週データのJSON変換成功');
+      console.log('翌週データ構造:', Object.keys(nextWeekResult.data || {}));
+    } else {
+      console.error('✗ 翌週データのJSON変換失敗:', nextWeekResult.error);
+    }
+    
+    console.log('\n=== JSON形式データ取得テスト完了 ===');
+    return {
+      success: true,
+      allData: allDataResult.success,
+      specificProgram: choicesResult.success,
+      nextWeek: nextWeekResult.success
+    };
+    
+  } catch (error: unknown) {
+    console.error('JSON形式データテストでエラー:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+
+/**
+ * JSON構造の詳細表示テスト関数
+ */
+function testJSONStructureDetails() {
+  try {
+    console.log('=== JSON構造詳細テスト ===');
+    
+    const result = webAppGetProgramDataAsJSON();
+    
+    if (!result.success) {
+      console.error('データ取得失敗:', result.error);
+      return { success: false, error: result.error };
+    }
+    
+    const jsonData = result.data;
+    
+    console.log('\n【期間情報】');
+    console.log('From:', jsonData.period?.from);
+    console.log('To:', jsonData.period?.to);
+    console.log('Label:', jsonData.period?.label);
+    
+    console.log('\n【共通通知】');
+    console.log('Permanent通知数:', jsonData.commonNotices?.permanent?.length || 0);
+    console.log('Weekly通知数:', jsonData.commonNotices?.weekly?.length || 0);
+    
+    console.log('\n【番組データ】');
+    const programs = jsonData.programs || {};
+    const programIds = Object.keys(programs);
+    console.log('取得番組数:', programIds.length);
+    
+    programIds.forEach(programId => {
+      const program = programs[programId];
+      console.log(`- ${programId}: エピソード${program.episodes?.length || 0}件, 録音${program.recordings?.length || 0}件`);
+      
+      if (program.episodes && program.episodes.length > 0) {
+        const firstEpisode = program.episodes[0];
+        console.log(`  最初のエピソード: ${firstEpisode.date} (${firstEpisode.weekday})`);
+        console.log(`    楽曲${firstEpisode.songs?.length || 0}件, 予約${firstEpisode.reservations?.length || 0}件`);
+        console.log(`    パブ枠${firstEpisode.publicitySlots?.length || 0}件, アナウンス${firstEpisode.announcements?.length || 0}件`);
+      }
+    });
+    
+    console.log('\n【サンプルJSON出力 (最初の100文字)】');
+    const formattedJson = result.formatted || '';
+    console.log(formattedJson.substring(0, 100) + '...');
+    
+    console.log('\n=== JSON構造詳細テスト完了 ===');
+    return { success: true, programCount: programIds.length };
+    
+  } catch (error: unknown) {
+    console.error('JSON構造詳細テストでエラー:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+
+// ======================
+// 番組メタデータ管理
+// ======================
+
+/**
+ * 番組メタデータ用の型定義
+ */
+interface ProgramMetadataStructure {
+  programs: Array<{
+    programId: string;
+    name: string;
+    meta: {
+      regularSlots: string[];
+      hosts: string[];
+      productionCompany: string | null;
+      startDate: string | null;
+      genre: string | null;
+      publicityFrames: Array<{
+        time: string;
+        allowedModes: string[];
+        label: string;
+      }>;
+      reportFrames: string[];
+      callFrames: string[];
+      specialFrames: Array<{
+        label: string;
+        day?: string;
+      }>;
+      notes: string[];
+    };
+  }>;
+}
+
+/**
+ * 番組メタデータのマスターデータ
+ */
+const PROGRAM_METADATA_MASTER: ProgramMetadataStructure = {
+  programs: [
+    {
+      programId: "cj-001",
+      name: "ちょうどいいラジオ",
+      meta: {
+        regularSlots: ["Mon–Thu 06:00-09:00"],
+        hosts: ["光邦", "石原", "平戸"],
+        productionCompany: "FMヨコハマ制作部",
+        startDate: "2017-04-03",
+        genre: "情報・音楽バラエティ",
+        publicityFrames: [
+          { 
+            time: "07:28", 
+            allowedModes: ["script", "phone", "report"], 
+            label: "パブ告知" 
+          }
+        ],
+        reportFrames: [],
+        callFrames: [],
+        specialFrames: [
+          { 
+            label: "ヨコアリくん", 
+            day: "tuesday" 
+          }
+        ],
+        notes: [
+          "平日朝の情報バラエティ番組",
+          "楽曲、パブリシティ、コーナー情報を含む",
+          "番組内収録コーナーあり"
+        ]
+      }
+    },
+    {
+      programId: "pt-001",
+      name: "PRIME TIME",
+      meta: {
+        regularSlots: ["Mon–Thu 19:00-22:00"],
+        hosts: ["中島らも", "トビー"],
+        productionCompany: "FMヨコハマ制作部",
+        startDate: null,
+        genre: "音楽番組",
+        publicityFrames: [
+          { 
+            time: "19:43", 
+            allowedModes: ["script"], 
+            label: "パブ" 
+          },
+          { 
+            time: "20:51", 
+            allowedModes: ["script", "phone"], 
+            label: "パブ" 
+          }
+        ],
+        reportFrames: [],
+        callFrames: [],
+        specialFrames: [],
+        notes: [
+          "平日夜の音楽番組",
+          "2つのパブリシティ枠を持つ",
+          "Traffic情報コーナーあり"
+        ]
+      }
+    },
+    {
+      programId: "fl-001",
+      name: "FLAG",
+      meta: {
+        regularSlots: ["Fri 12:00-16:00"],
+        hosts: ["トビー"],
+        productionCompany: "FMヨコハマ制作部",
+        startDate: null,
+        genre: "情報・音楽",
+        publicityFrames: [
+          { 
+            time: "12:40", 
+            allowedModes: ["report", "phone", "script"], 
+            label: "パブ" 
+          },
+          { 
+            time: "13:29", 
+            allowedModes: ["script"], 
+            label: "パブ" 
+          }
+        ],
+        reportFrames: ["12:15", "14:29"],
+        callFrames: [],
+        specialFrames: [],
+        notes: [
+          "金曜日の情報・音楽番組",
+          "レポート枠とパブリシティ枠を持つ",
+          "4時間の長時間番組"
+        ]
+      }
+    },
+    {
+      programId: "gbs-001",
+      name: "God Bless Saturday",
+      meta: {
+        regularSlots: ["Sat 13:00-16:00"],
+        hosts: ["平戸"],
+        productionCompany: "FMヨコハマ制作部",
+        startDate: null,
+        genre: "情報・音楽",
+        publicityFrames: [
+          { 
+            time: "14:41", 
+            allowedModes: ["script"], 
+            label: "パブ" 
+          }
+        ],
+        reportFrames: [],
+        callFrames: [],
+        specialFrames: [],
+        notes: [
+          "土曜日の情報・音楽番組",
+          "外部生放送対応あり"
+        ]
+      }
+    },
+    {
+      programId: "r847-001",
+      name: "Route 847",
+      meta: {
+        regularSlots: ["Sat 16:00-18:00"],
+        hosts: [],
+        productionCompany: "FMヨコハマ制作部",
+        startDate: null,
+        genre: "音楽",
+        publicityFrames: [
+          { 
+            time: "17:41", 
+            allowedModes: ["script"], 
+            label: "パブ" 
+          }
+        ],
+        reportFrames: ["16:47"],
+        callFrames: [],
+        specialFrames: [],
+        notes: [
+          "土曜日夕方の音楽番組",
+          "レポート枠とパブリシティ枠を持つ"
+        ]
+      }
+    }
+  ]
+};
+
+/**
+ * 番組メタデータをJSON形式に整形する関数
+ */
+function formatProgramMetadataAsJSON(): ProgramMetadataStructure {
+  try {
+    console.log('番組メタデータのJSON形式変換開始');
+    
+    // マスターデータをそのまま返す（将来的には動的データと統合可能）
+    const result: ProgramMetadataStructure = {
+      programs: PROGRAM_METADATA_MASTER.programs.map(program => ({
+        programId: program.programId,
+        name: program.name,
+        meta: {
+          regularSlots: [...program.meta.regularSlots],
+          hosts: [...program.meta.hosts],
+          productionCompany: program.meta.productionCompany,
+          startDate: program.meta.startDate,
+          genre: program.meta.genre,
+          publicityFrames: program.meta.publicityFrames.map(frame => ({
+            time: frame.time,
+            allowedModes: [...frame.allowedModes],
+            label: frame.label
+          })),
+          reportFrames: [...program.meta.reportFrames],
+          callFrames: [...program.meta.callFrames],
+          specialFrames: program.meta.specialFrames.map(frame => ({
+            label: frame.label,
+            ...(frame.day && { day: frame.day })
+          })),
+          notes: [...program.meta.notes]
+        }
+      }))
+    };
+    
+    console.log('番組メタデータのJSON変換完了');
+    return result;
+    
+  } catch (error: unknown) {
+    console.error('番組メタデータのJSON変換エラー:', error);
+    throw error;
+  }
+}
+
+/**
+ * WebApp用の番組メタデータ取得関数
+ */
+function webAppGetProgramMetadataAsJSON() {
+  try {
+    console.log('WebApp: 番組メタデータ取得開始');
+    
+    const metadataJson = formatProgramMetadataAsJSON();
+    
+    return {
+      success: true,
+      data: metadataJson,
+      formatted: JSON.stringify(metadataJson, null, 2),
+      timestamp: new Date().toISOString(),
+      programCount: metadataJson.programs.length
+    };
+    
+  } catch (error: unknown) {
+    console.error('WebApp: 番組メタデータ取得エラー:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+
+/**
+ * 特定番組のメタデータのみを取得する関数
+ */
+function webAppGetSingleProgramMetadata(programName: string) {
+  try {
+    console.log(`WebApp: 特定番組メタデータ取得開始 - ${programName}`);
+    
+    const allMetadata = formatProgramMetadataAsJSON();
+    const targetProgram = allMetadata.programs.find(program => 
+      program.name === programName || program.programId === programName
+    );
+    
+    if (!targetProgram) {
+      return {
+        success: false,
+        error: `番組 "${programName}" のメタデータが見つかりません`
+      };
+    }
+    
+    const result = {
+      programs: [targetProgram]
+    };
+    
+    return {
+      success: true,
+      data: result,
+      formatted: JSON.stringify(result, null, 2),
+      timestamp: new Date().toISOString(),
+      programName: targetProgram.name,
+      programId: targetProgram.programId
+    };
+    
+  } catch (error: unknown) {
+    console.error('WebApp: 特定番組メタデータ取得エラー:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+
+/**
+ * メタデータ管理用のスプレッドシート初期化
+ */
+function initializeMetadataSheet(): GoogleAppsScript.Spreadsheet.Sheet {
+  try {
+    const spreadsheet = SpreadsheetApp.openById(CONFIG.METADATA_SPREADSHEET_ID);
+    let sheet = spreadsheet.getSheetByName(CONFIG.METADATA_SHEET_NAME);
+    
+    if (!sheet) {
+      sheet = spreadsheet.insertSheet(CONFIG.METADATA_SHEET_NAME);
+      
+      // ヘッダー行を追加
+      const headers = [
+        'programId', 'name', 'regularSlots', 'hosts', 'productionCompany',
+        'startDate', 'genre', 'publicityFrames', 'reportFrames', 'callFrames',
+        'specialFrames', 'notes', 'lastUpdated', 'createdAt'
+      ];
+      
+      sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+      sheet.getRange(1, 1, 1, headers.length).setFontWeight('bold');
+      sheet.setFrozenRows(1);
+      
+      console.log('メタデータシートを初期化しました');
+    }
+    
+    return sheet;
+    
+  } catch (error: unknown) {
+    console.error('メタデータシート初期化エラー:', error);
+    throw error;
+  }
+}
+
+/**
+ * 番組メタデータをスプレッドシートに保存
+ */
+function saveProgramMetadataToSheet(metadata: ProgramMetadataStructure['programs'][0]): ProgramMetadataRow {
+  try {
+    const sheet = initializeMetadataSheet();
+    const now = new Date().toISOString();
+    
+    const row: ProgramMetadataRow = {
+      programId: metadata.programId,
+      name: metadata.name,
+      regularSlots: metadata.meta.regularSlots.join(', '),
+      hosts: metadata.meta.hosts.join(', '),
+      productionCompany: metadata.meta.productionCompany || '',
+      startDate: metadata.meta.startDate || '',
+      genre: metadata.meta.genre || '',
+      publicityFrames: JSON.stringify(metadata.meta.publicityFrames),
+      reportFrames: JSON.stringify(metadata.meta.reportFrames),
+      callFrames: JSON.stringify(metadata.meta.callFrames),
+      specialFrames: JSON.stringify(metadata.meta.specialFrames),
+      notes: metadata.meta.notes.join(', '),
+      lastUpdated: now,
+      createdAt: now
+    };
+    
+    // 既存データをチェック
+    const data = sheet.getDataRange().getValues();
+    const existingRowIndex = data.findIndex((rowData, index) => 
+      index > 0 && rowData[0] === metadata.programId
+    );
+    
+    const rowData = Object.values(row);
+    
+    if (existingRowIndex > 0) {
+      // 既存データを更新
+      row.createdAt = data[existingRowIndex][13] || now; // 作成日は維持
+      rowData[13] = row.createdAt;
+      sheet.getRange(existingRowIndex + 1, 1, 1, rowData.length).setValues([rowData]);
+      console.log(`番組メタデータを更新しました: ${metadata.name}`);
+    } else {
+      // 新規データを追加
+      sheet.getRange(data.length + 1, 1, 1, rowData.length).setValues([rowData]);
+      console.log(`番組メタデータを新規作成しました: ${metadata.name}`);
+    }
+    
+    return row;
+    
+  } catch (error: unknown) {
+    console.error('番組メタデータ保存エラー:', error);
+    throw error;
+  }
+}
+
+/**
+ * 番組メタデータをスプレッドシートから読み込み
+ */
+function loadProgramMetadataFromSheet(): ProgramMetadataStructure['programs'] {
+  try {
+    const sheet = initializeMetadataSheet();
+    const data = sheet.getDataRange().getValues();
+    
+    if (data.length <= 1) {
+      return [];
+    }
+    
+    const headers = data[0];
+    const programs: ProgramMetadataStructure['programs'] = [];
+    
+    for (let i = 1; i < data.length; i++) {
+      const rowData = data[i];
+      
+      try {
+        const program: ProgramMetadataStructure['programs'][0] = {
+          programId: rowData[0] || '',
+          name: rowData[1] || '',
+          meta: {
+            regularSlots: rowData[2] ? rowData[2].split(',').map((s: string) => s.trim()).filter(Boolean) : [],
+            hosts: rowData[3] ? rowData[3].split(',').map((s: string) => s.trim()).filter(Boolean) : [],
+            productionCompany: rowData[4] || '',
+            startDate: rowData[5] || null,
+            genre: rowData[6] || '',
+            publicityFrames: rowData[7] ? JSON.parse(rowData[7]) : [],
+            reportFrames: rowData[8] ? JSON.parse(rowData[8]) : [],
+            callFrames: rowData[9] ? JSON.parse(rowData[9]) : [],
+            specialFrames: rowData[10] ? JSON.parse(rowData[10]) : [],
+            notes: rowData[11] ? rowData[11].split(',').map((s: string) => s.trim()).filter(Boolean) : []
+          }
+        };
+        
+        programs.push(program);
+        
+      } catch (parseError) {
+        console.warn(`行 ${i + 1} のデータ解析でエラー:`, parseError);
+        continue;
+      }
+    }
+    
+    console.log(`${programs.length}件の番組メタデータを読み込みました`);
+    return programs;
+    
+  } catch (error: unknown) {
+    console.error('番組メタデータ読み込みエラー:', error);
+    return [];
+  }
+}
+
+/**
+ * 番組メタデータを削除
+ */
+function deleteProgramMetadataFromSheet(programId: string): boolean {
+  try {
+    const sheet = initializeMetadataSheet();
+    const data = sheet.getDataRange().getValues();
+    
+    const rowIndex = data.findIndex((rowData, index) => 
+      index > 0 && rowData[0] === programId
+    );
+    
+    if (rowIndex > 0) {
+      sheet.deleteRow(rowIndex + 1);
+      console.log(`番組メタデータを削除しました: ${programId}`);
+      return true;
+    } else {
+      console.warn(`削除対象の番組が見つかりません: ${programId}`);
+      return false;
+    }
+    
+  } catch (error: unknown) {
+    console.error('番組メタデータ削除エラー:', error);
+    return false;
+  }
+}
+
+/**
+ * WebApp用の番組メタデータ保存関数
+ */
+function webAppSaveProgramMetadata(metadata: ProgramMetadataStructure['programs'][0]) {
+  try {
+    console.log('WebApp: 番組メタデータ保存開始:', metadata.name);
+    
+    const savedRow = saveProgramMetadataToSheet(metadata);
+    
+    return {
+      success: true,
+      data: savedRow,
+      message: '番組メタデータの保存が完了しました',
+      timestamp: new Date().toISOString()
+    };
+    
+  } catch (error: unknown) {
+    console.error('WebApp: 番組メタデータ保存エラー:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+
+/**
+ * WebApp用の番組メタデータ削除関数
+ */
+function webAppDeleteProgramMetadata(programId: string) {
+  try {
+    console.log('WebApp: 番組メタデータ削除開始:', programId);
+    
+    const deleted = deleteProgramMetadataFromSheet(programId);
+    
+    if (deleted) {
+      return {
+        success: true,
+        message: '番組メタデータの削除が完了しました',
+        programId: programId,
+        timestamp: new Date().toISOString()
+      };
+    } else {
+      return {
+        success: false,
+        error: '削除対象の番組メタデータが見つかりませんでした'
+      };
+    }
+    
+  } catch (error: unknown) {
+    console.error('WebApp: 番組メタデータ削除エラー:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+
+/**
+ * スプレッドシートとマスターデータを統合した番組メタデータ取得関数
+ */
+function webAppGetProgramMetadataAsJSONUnified() {
+  try {
+    console.log('WebApp: 統合番組メタデータ取得開始');
+    
+    // スプレッドシートからデータを読み込み
+    const spreadsheetData = loadProgramMetadataFromSheet();
+    
+    // マスターデータと統合（スプレッドシートのデータを優先）
+    const masterData = PROGRAM_METADATA_MASTER.programs;
+    const mergedPrograms: ProgramMetadataStructure['programs'] = [];
+    
+    // スプレッドシートのデータを追加
+    spreadsheetData.forEach(program => {
+      mergedPrograms.push(program);
+    });
+    
+    // マスターデータから、スプレッドシートにない番組を追加
+    masterData.forEach(masterProgram => {
+      const exists = spreadsheetData.some(spreadsheetProgram => 
+        spreadsheetProgram.programId === masterProgram.programId
+      );
+      
+      if (!exists) {
+        mergedPrograms.push(masterProgram);
+      }
+    });
+    
+    const result: ProgramMetadataStructure = {
+      programs: mergedPrograms
+    };
+    
+    return {
+      success: true,
+      data: result,
+      formatted: JSON.stringify(result, null, 2),
+      timestamp: new Date().toISOString(),
+      programCount: result.programs.length,
+      spreadsheetCount: spreadsheetData.length,
+      masterCount: masterData.length
+    };
+    
+  } catch (error: unknown) {
+    console.error('WebApp: 統合番組メタデータ取得エラー:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+
+/**
+ * 番組メタデータのテスト関数
+ */
+function testProgramMetadata() {
+  try {
+    console.log('=== 番組メタデータテスト開始 ===');
+    
+    // テスト1: 全番組メタデータ取得
+    console.log('\n【テスト1】全番組メタデータ取得');
+    const allResult = webAppGetProgramMetadataAsJSON();
+    
+    if (allResult.success) {
+      console.log('✓ 全番組メタデータ取得成功');
+      console.log('番組数:', allResult.programCount);
+      console.log('データサイズ:', allResult.formatted?.length || 0, '文字');
+    } else {
+      console.error('✗ 全番組メタデータ取得失敗:', allResult.error);
+    }
+    
+    // テスト2: 特定番組メタデータ取得
+    console.log('\n【テスト2】特定番組メタデータ取得 - ちょうどいいラジオ');
+    const singleResult = webAppGetSingleProgramMetadata('ちょうどいいラジオ');
+    
+    if (singleResult.success) {
+      console.log('✓ 特定番組メタデータ取得成功');
+      console.log('番組名:', singleResult.programName);
+      console.log('番組ID:', singleResult.programId);
+    } else {
+      console.error('✗ 特定番組メタデータ取得失敗:', singleResult.error);
+    }
+    
+    // テスト3: 存在しない番組のテスト
+    console.log('\n【テスト3】存在しない番組のテスト');
+    const notFoundResult = webAppGetSingleProgramMetadata('存在しない番組');
+    
+    if (!notFoundResult.success) {
+      console.log('✓ 存在しない番組の適切なエラーハンドリング確認');
+      console.log('エラーメッセージ:', notFoundResult.error);
+    } else {
+      console.error('✗ 存在しない番組でエラーが発生しませんでした');
+    }
+    
+    console.log('\n=== 番組メタデータテスト完了 ===');
+    return {
+      success: true,
+      allMetadata: allResult.success,
+      singleMetadata: singleResult.success,
+      errorHandling: !notFoundResult.success
+    };
+    
+  } catch (error: unknown) {
+    console.error('番組メタデータテストでエラー:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+
+// ======================
+// Raw Program Data機能
+// ======================
+
+/**
+ * 曜日順序を正規化するマップ
+ */
+const WEEKDAY_ORDER = {
+  'monday': 1,
+  'tuesday': 2,
+  'wednesday': 3,
+  'thursday': 4,
+  'friday': 5,
+  'saturday': 6,
+  'sunday': 7
+};
+
+/**
+ * 曜日データを正しい順序で並び替える関数
+ */
+function sortWeekdaysData(data: any): any {
+  if (!data || typeof data !== 'object') {
+    return data;
+  }
+
+  const sortedData: any = {};
+  
+  // 収録予定などの特別キーを最初に処理
+  Object.keys(data).forEach(key => {
+    if (key.includes('収録予定') || !WEEKDAY_ORDER[key.toLowerCase()]) {
+      sortedData[key] = data[key];
+    }
+  });
+  
+  // 曜日を正しい順序で並び替え
+  const weekdayKeys = Object.keys(data)
+    .filter(key => WEEKDAY_ORDER[key.toLowerCase()])
+    .sort((a, b) => WEEKDAY_ORDER[a.toLowerCase()] - WEEKDAY_ORDER[b.toLowerCase()]);
+  
+  weekdayKeys.forEach(key => {
+    sortedData[key] = data[key];
+  });
+  
+  return sortedData;
+}
+
+/**
+ * 指定番組のみを抽出する関数
+ */
+function extractSpecificProgramData(allData: any, programName: string): any {
+  if (!allData || typeof allData !== 'object') {
+    return {};
+  }
+
+  const result: any = {};
+  
+  // 各曜日から指定番組のデータのみを抽出
+  Object.keys(allData).forEach(dayKey => {
+    const dayData = allData[dayKey];
+    
+    if (dayKey.includes('収録予定')) {
+      // 収録予定は番組名でフィルタ
+      if (dayData && typeof dayData === 'object' && dayData[programName]) {
+        result[dayKey] = { [programName]: dayData[programName] };
+      }
+      return;
+    }
+    
+    if (dayData && typeof dayData === 'object') {
+      const programData = dayData[programName];
+      if (programData) {
+        result[dayKey] = { [programName]: programData };
+      }
+    }
+  });
+  
+  return result;
+}
+
+/**
+ * WebApp用の完全生データ取得関数（指定番組のみ）
+ */
+function webAppGetRawProgramDataUnfiltered(programName: string, weekType: string = 'thisWeek') {
+  try {
+    console.log(`完全生データ取得開始: ${programName} (${weekType})`);
+    
+    if (!programName) {
+      return {
+        success: false,
+        error: '番組名を指定してください'
+      };
+    }
+    
+    // 対象週のシートを取得
+    const config = getConfig();
+    const spreadsheet = SpreadsheetApp.openById(config.SPREADSHEET_ID);
+    const weekOffset = weekType === 'thisWeek' ? 0 : 1;
+    const sheet = getSheetByWeek(spreadsheet, weekOffset);
+    
+    if (!sheet) {
+      return {
+        success: false,
+        error: '指定された週のシートが見つかりません'
+      };
+    }
+    
+    console.log(`使用シート: ${sheet.getName()}`);
+    
+    // 週データを抽出（完全版）
+    const rawWeekData = extractStructuredWeekData(sheet);
+    
+    if (!rawWeekData) {
+      return {
+        success: false,
+        error: 'データの抽出に失敗しました'
+      };
+    }
+    
+    // 指定番組のみを抽出
+    const filteredData = extractSpecificProgramData(rawWeekData, programName);
+    
+    if (!filteredData || Object.keys(filteredData).length === 0) {
+      return {
+        success: false,
+        error: `番組 "${programName}" のデータが見つかりません`
+      };
+    }
+    
+    // 曜日順序を正規化
+    const sortedData = sortWeekdaysData(filteredData);
+    
+    console.log(`完全生データ取得完了: ${programName}`);
+    
+    return {
+      success: true,
+      programName: programName,
+      weekType: weekType,
+      sheetName: sheet.getName(),
+      timestamp: new Date().toISOString(),
+      data: sortedData
+    };
+    
+  } catch (error: unknown) {
+    console.error('完全生データ取得エラー:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+
+/**
+ * 完全生データ機能のテスト関数
+ */
+function testRawProgramDataUnfiltered() {
+  try {
+    console.log('=== 完全生データ機能テスト開始 ===');
+    
+    // テスト1: PRIME TIMEの今週データ
+    console.log('\n【テスト1】PRIME TIME 今週データ取得');
+    const primeTimeResult = webAppGetRawProgramDataUnfiltered('PRIME TIME', 'thisWeek');
+    
+    if (primeTimeResult.success) {
+      console.log('✓ PRIME TIME 今週データ取得成功');
+      console.log('シート名:', primeTimeResult.sheetName);
+      console.log('データキー:', Object.keys(primeTimeResult.data));
+    } else {
+      console.error('✗ PRIME TIME 今週データ取得失敗:', primeTimeResult.error);
+    }
+    
+    // テスト2: ちょうどいいラジオの翌週データ
+    console.log('\n【テスト2】ちょうどいいラジオ 翌週データ取得');
+    const choudoResult = webAppGetRawProgramDataUnfiltered('ちょうどいいラジオ', 'nextWeek');
+    
+    if (choudoResult.success) {
+      console.log('✓ ちょうどいいラジオ 翌週データ取得成功');
+      console.log('シート名:', choudoResult.sheetName);
+      console.log('データキー:', Object.keys(choudoResult.data));
+    } else {
+      console.error('✗ ちょうどいいラジオ 翌週データ取得失敗:', choudoResult.error);
+    }
+    
+    // テスト3: 存在しない番組
+    console.log('\n【テスト3】存在しない番組テスト');
+    const notFoundResult = webAppGetRawProgramDataUnfiltered('存在しない番組');
+    
+    if (!notFoundResult.success) {
+      console.log('✓ 存在しない番組の適切なエラーハンドリング確認');
+      console.log('エラーメッセージ:', notFoundResult.error);
+    } else {
+      console.error('✗ 存在しない番組でエラーが発生しませんでした');
+    }
+    
+    console.log('\n=== 完全生データ機能テスト完了 ===');
+    return {
+      success: true,
+      primeTime: primeTimeResult.success,
+      choudo: choudoResult.success,
+      errorHandling: !notFoundResult.success
+    };
+    
+  } catch (error: unknown) {
+    console.error('完全生データ機能テストでエラー:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
 }
 
