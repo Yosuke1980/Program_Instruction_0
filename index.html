@@ -468,6 +468,64 @@
             background: #f7fafc;
         }
 
+        /* 番組一覧表専用スタイル */
+        .program-table th {
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .program-table th:hover {
+            background: #edf2f7;
+        }
+
+        .episode-details {
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+
+        .episode-table {
+            margin-top: 10px;
+            font-size: 0.9rem;
+        }
+
+        .episode-table th,
+        .episode-table td {
+            padding: 8px 12px;
+        }
+
+        .table-controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            gap: 20px;
+        }
+
+        .table-filters {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .btn-sm {
+            padding: 4px 8px;
+            font-size: 0.8rem;
+            border-radius: 4px;
+        }
+
+        .error-data {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 200px;
+            color: #e53e3e;
+            background: #fed7d7;
+            border-radius: 8px;
+            text-align: center;
+        }
+
         .data-header {
             display: flex;
             justify-content: space-between;
@@ -910,6 +968,7 @@
             <ul>
                 <li><button class="tab-button active" onclick="switchTab('generate')">ドキュメント生成</button></li>
                 <li><button class="tab-button" onclick="switchTab('metadata')">メタデータ編集</button></li>
+                <li><button class="tab-button" onclick="switchTab('table')">番組一覧表</button></li>
                 <li><button class="tab-button" onclick="switchTab('debug')">データ構造確認</button></li>
             </ul>
         </div>
@@ -1120,7 +1179,31 @@
             </div>
         </div>
 
-        <!-- タブ3: データ構造確認 -->
+        <!-- タブ3: 番組一覧表 -->
+        <div id="tab-table" class="tab-content">
+            <div style="text-align: center; margin-bottom: 30px;">
+                <h3 style="color: #2d3748; margin-bottom: 10px;">📊 番組一覧表</h3>
+                <p style="color: #718096;">全番組のエピソード情報を表形式で確認できます</p>
+            </div>
+
+            <div class="table-controls">
+                <button onclick="loadProgramTable()" class="btn btn-primary">
+                    番組データを読み込み
+                </button>
+                <div class="table-filters" style="display: none;">
+                    <input type="text" id="program-filter" placeholder="番組名でフィルタ..." 
+                           onkeyup="filterProgramTable()" class="form-control" style="width: 200px;">
+                </div>
+            </div>
+
+            <div id="table-display" class="data-display">
+                <div class="empty-data">
+                    上記のボタンをクリックして番組データを読み込んでください
+                </div>
+            </div>
+        </div>
+
+        <!-- タブ4: データ構造確認 -->
         <div id="tab-debug" class="tab-content">
             <div style="text-align: center; margin-bottom: 30px;">
                 <h3 style="color: #2d3748; margin-bottom: 10px;">🔍 データ構造確認</h3>
@@ -1992,6 +2075,193 @@
                     }
                 }
             };
+        }
+
+        // 番組一覧表の読み込み
+        function loadProgramTable() {
+            const tableDisplay = document.getElementById('table-display');
+            const tableFilters = document.querySelector('.table-filters');
+            
+            // ローディング表示
+            tableDisplay.innerHTML = '<div class="loading-data">番組データを読み込み中...</div>';
+            
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    if (result.success) {
+                        displayProgramTable(result.data);
+                        tableFilters.style.display = 'block';
+                    } else {
+                        tableDisplay.innerHTML = `<div class="error-data">エラー: ${result.error}</div>`;
+                    }
+                })
+                .withFailureHandler(function(error) {
+                    tableDisplay.innerHTML = `<div class="error-data">読み込みエラー: ${error.message}</div>`;
+                })
+                .webAppGetProgramsAsTable();
+        }
+
+        // 番組一覧表の表示
+        function displayProgramTable(programs) {
+            const tableDisplay = document.getElementById('table-display');
+            
+            if (!programs || programs.length === 0) {
+                tableDisplay.innerHTML = '<div class="empty-data">番組データがありません</div>';
+                return;
+            }
+
+            let html = `
+                <table class="data-table program-table" id="program-table">
+                    <thead>
+                        <tr>
+                            <th onclick="sortTable(0)">番組名 ↕</th>
+                            <th onclick="sortTable(1)">ID</th>
+                            <th onclick="sortTable(2)">エピソード数 ↕</th>
+                            <th onclick="sortTable(3)">録音数 ↕</th>
+                            <th onclick="sortTable(4)">最新エピソード ↕</th>
+                            <th onclick="sortTable(5)">総楽曲数 ↕</th>
+                            <th onclick="sortTable(6)">総告知数 ↕</th>
+                            <th>詳細</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            programs.forEach((program, index) => {
+                html += `
+                    <tr>
+                        <td><strong>${program.name}</strong></td>
+                        <td><code>${program.id}</code></td>
+                        <td>${program.episodeCount}</td>
+                        <td>${program.recordingCount}</td>
+                        <td>${program.latestEpisode}</td>
+                        <td>${program.totalSongs}</td>
+                        <td>${program.totalAnnouncements}</td>
+                        <td>
+                            <button class="btn btn-sm" onclick="toggleEpisodeDetails(${index})" 
+                                    id="detail-btn-${index}">
+                                表示
+                            </button>
+                        </td>
+                    </tr>
+                    <tr id="episode-details-${index}" style="display: none;">
+                        <td colspan="8">
+                            <div class="episode-details">
+                                ${generateEpisodeDetailsHTML(program.episodes)}
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            html += '</tbody></table>';
+            tableDisplay.innerHTML = html;
+            
+            // グローバル変数に保存（フィルタリング用）
+            window.currentPrograms = programs;
+        }
+
+        // エピソード詳細HTMLの生成
+        function generateEpisodeDetailsHTML(episodes) {
+            if (!episodes || episodes.length === 0) {
+                return '<p>エピソードがありません</p>';
+            }
+
+            let html = `
+                <table class="data-table episode-table">
+                    <thead>
+                        <tr>
+                            <th>日付</th>
+                            <th>曜日</th>
+                            <th>楽曲数</th>
+                            <th>告知数</th>
+                            <th>予約数</th>
+                            <th>パブ枠数</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            episodes.forEach(episode => {
+                html += `
+                    <tr>
+                        <td>${episode.date}</td>
+                        <td>${episode.weekday}</td>
+                        <td>${episode.songCount}</td>
+                        <td>${episode.announcementCount}</td>
+                        <td>${episode.reservationCount}</td>
+                        <td>${episode.publicitySlotCount}</td>
+                    </tr>
+                `;
+            });
+
+            html += '</tbody></table>';
+            return html;
+        }
+
+        // エピソード詳細の表示切り替え
+        function toggleEpisodeDetails(index) {
+            const detailsRow = document.getElementById(`episode-details-${index}`);
+            const button = document.getElementById(`detail-btn-${index}`);
+            
+            if (detailsRow.style.display === 'none') {
+                detailsRow.style.display = '';
+                button.textContent = '非表示';
+            } else {
+                detailsRow.style.display = 'none';
+                button.textContent = '表示';
+            }
+        }
+
+        // 番組表のフィルタリング
+        function filterProgramTable() {
+            const filter = document.getElementById('program-filter').value.toLowerCase();
+            const table = document.getElementById('program-table');
+            const rows = table.getElementsByTagName('tr');
+
+            for (let i = 1; i < rows.length; i += 2) { // 奇数行のみ（番組行）
+                const programName = rows[i].getElementsByTagName('td')[0].textContent.toLowerCase();
+                if (programName.indexOf(filter) > -1) {
+                    rows[i].style.display = '';
+                    if (i + 1 < rows.length) rows[i + 1].style.display = ''; // 詳細行も表示
+                } else {
+                    rows[i].style.display = 'none';
+                    if (i + 1 < rows.length) rows[i + 1].style.display = 'none'; // 詳細行も非表示
+                }
+            }
+        }
+
+        // 表のソート機能
+        function sortTable(columnIndex) {
+            const table = document.getElementById('program-table');
+            const tbody = table.getElementsByTagName('tbody')[0];
+            const rows = Array.from(tbody.getElementsByTagName('tr'));
+            
+            // 番組行のみを取得（偶数インデックス）
+            const programRows = rows.filter((row, index) => index % 2 === 0);
+            
+            programRows.sort((a, b) => {
+                const aValue = a.getElementsByTagName('td')[columnIndex].textContent;
+                const bValue = b.getElementsByTagName('td')[columnIndex].textContent;
+                
+                // 数値の場合は数値として比較
+                if (!isNaN(aValue) && !isNaN(bValue)) {
+                    return parseInt(bValue) - parseInt(aValue);
+                }
+                
+                // 文字列として比較
+                return aValue.localeCompare(bValue);
+            });
+
+            // 表を再構築
+            tbody.innerHTML = '';
+            programRows.forEach((row, index) => {
+                tbody.appendChild(row);
+                // 対応する詳細行も追加
+                const detailsRow = rows[rows.indexOf(row) + 1];
+                if (detailsRow) {
+                    tbody.appendChild(detailsRow);
+                }
+            });
         }
     </script>
 </body>
