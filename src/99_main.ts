@@ -1,56 +1,5 @@
-// Google Apps Script用にCONFIGを直接定義
-const CONFIG = {
-  SPREADSHEET_ID: '1r6GLEvsZiqb3vkXZmrZ7XCpvW4RcecC7Bfp9YzhnQUE',
-  CALENDAR_ID: 'c_8e4bd1f0e76b0a56a42c74b17b439c68e7da6ad78f13bab24461a0ac56df2d5c@group.calendar.google.com',
-  MUSIC_SPREADSHEET_ID: '1F6iTNBENB9vZV5sCF4K2DbK0XUW3UaaKpjic3UEmWhE',
-  MUSIC_SHEET_NAME: '指定曲リスト',
-  EMAIL_ADDRESS: 'watanabe@fmyokohama.co.jp',
-  
-  // Googleドキュメントテンプレート設定
-  DOCUMENT_TEMPLATES: {
-    'ちょうどいいラジオ': '1rIW5gT20G974PgBC4IXyqjwW0OltItJpEmg2UpL8Ods',
-    'PRIME TIME': '1z0iEKbsIvxYC0OcnOHgebB6p1nZj5TY6aDFxSSN0OhA',
-    'FLAG': '12gqWH7aIG34vmFJZ5LnEPc21Qg_fFYI4VTmaEnCGAxc',
-    'God Bless Saturday': '1UaWzLXif5NgiE079m7D51GegBYry9s-ge6P_n175kXY',
-    'Route 847': '1GtlZEYnY6RTqv8qtLRnSFMJXHj4OunjYIRHLhA_uU-g'
-  },
-  
-  DOCUMENT_OUTPUT_FOLDER_ID: '1-YJXe7YJzevvUUrcp-VlEyKO3YHLH4qf',
-  
-  // PORTSIDE専用カレンダー
-  PORTSIDE_CALENDAR_ID: 'c_a25ffe304a25338178cd461a7b159103bd46ea62c64e773fdf4c61b4b36ab2fc@group.calendar.google.com',
-  
-  // 番組メタデータ管理用スプレッドシート
-  METADATA_SPREADSHEET_ID: '1r6GLEvsZiqb3vkXZmrZ7XCpvW4RcecC7Bfp9YzhnQUE', // 同じスプレッドシートを使用
-  METADATA_SHEET_NAME: '番組メタデータ'
-};
-
-// 型定義
-interface ProgramResult {
-  program: string;
-  docId: string;
-  url: string;
-}
-
-interface MusicItem {
-  曲名: string;
-  URL: string;
-}
-
-interface DaySchedule {
-  [key: string]: MusicItem[];
-}
-
-interface WeeklySchedule {
-  [key: string]: MusicItem[];
-  monday: MusicItem[];
-  tuesday: MusicItem[];
-  wednesday: MusicItem[];
-  thursday: MusicItem[];
-  friday: MusicItem[];
-  saturday: MusicItem[];
-  sunday: MusicItem[];
-}
+// メイン処理ファイル
+// 設定とタイプ定義は 01_config.ts と 02_types.ts で定義済み
 
 // メタデータ管理用インターフェース
 interface ProgramMetadataRow {
@@ -121,6 +70,130 @@ interface DocumentTemplates {
 //     error(...args: any[]): void;
 //   }
 // }
+
+/**
+ * データフロー分析用デバッグユーティリティ
+ */
+
+// デバッグ用のJSONデータ保存領域
+let debugDataStore: { [key: string]: any } = {};
+
+/**
+ * デバッグ用JSON出力関数 - 段階別にデータを記録
+ */
+function debugOutputJSON(stage: string, data: any, context: string = ''): void {
+  try {
+    const timestamp = new Date().toISOString();
+    const debugInfo = {
+      stage: stage,
+      context: context,
+      timestamp: timestamp,
+      dataType: typeof data,
+      isArray: Array.isArray(data),
+      keyCount: data && typeof data === 'object' ? Object.keys(data).length : 0,
+      data: data
+    };
+    
+    // メモリに保存
+    const key = `${stage}_${timestamp}`;
+    debugDataStore[key] = debugInfo;
+    
+    // コンソールに出力
+    console.log(`[DEBUG-${stage}] ${context}`);
+    console.log(`[DEBUG-${stage}] Timestamp: ${timestamp}`);
+    console.log(`[DEBUG-${stage}] Data Type: ${typeof data} ${Array.isArray(data) ? '(Array)' : ''}`);
+    if (data && typeof data === 'object') {
+      console.log(`[DEBUG-${stage}] Keys: [${Object.keys(data).join(', ')}]`);
+    }
+    console.log(`[DEBUG-${stage}] JSON:`, JSON.stringify(data, null, 2));
+    console.log(`[DEBUG-${stage}] ===========================`);
+  } catch (error) {
+    console.error(`デバッグ出力エラー [${stage}]:`, error);
+  }
+}
+
+/**
+ * Google Driveにデバッグデータを保存
+ */
+function saveDebugJSON(filename: string, data: any): string | null {
+  try {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const debugFileName = `debug_${filename}_${timestamp}.json`;
+    
+    const jsonContent = JSON.stringify({
+      filename: debugFileName,
+      timestamp: new Date().toISOString(),
+      data: data
+    }, null, 2);
+    
+    // Google Driveのデバッグフォルダに保存（存在しない場合は作成）
+    let debugFolder;
+    try {
+      const folders = DriveApp.getFoldersByName('Debug_JSON_Output');
+      if (folders.hasNext()) {
+        debugFolder = folders.next();
+      } else {
+        debugFolder = DriveApp.createFolder('Debug_JSON_Output');
+      }
+    } catch (e) {
+      console.log('デバッグフォルダ作成/取得できませんでした、ルートに保存します');
+      debugFolder = DriveApp.getRootFolder();
+    }
+    
+    const file = debugFolder.createFile(debugFileName, jsonContent, 'application/json');
+    console.log(`デバッグJSONを保存しました: ${debugFileName}`);
+    return file.getUrl();
+  } catch (error) {
+    console.error('デバッグJSON保存エラー:', error);
+    return null;
+  }
+}
+
+/**
+ * デバッグデータストアからデータを取得
+ */
+function getDebugData(stage?: string): any {
+  if (stage) {
+    const filteredData = {};
+    Object.keys(debugDataStore).forEach(key => {
+      if (key.includes(stage)) {
+        filteredData[key] = debugDataStore[key];
+      }
+    });
+    return filteredData;
+  }
+  return debugDataStore;
+}
+
+/**
+ * デバッグデータストアをクリア
+ */
+function clearDebugData(): void {
+  debugDataStore = {};
+  console.log('デバッグデータストアをクリアしました');
+}
+
+/**
+ * WebApp用デバッグデータ取得API
+ */
+function webAppGetDebugData(stage?: string) {
+  try {
+    const data = getDebugData(stage);
+    return {
+      success: true,
+      timestamp: new Date().toISOString(),
+      requestedStage: stage || 'all',
+      dataCount: Object.keys(data).length,
+      data: data
+    };
+  } catch (error) {
+    return {
+      success: false,
+      error: error.toString(),
+      timestamp: new Date().toISOString()
+    };
+  }
+}
 
 /**
  * WebApp用のGAS追加コード
@@ -383,6 +456,9 @@ function webAppGetProgramDataThisWeek(programName: string) {
   try {
     console.log(`WebApp: 番組データ取得開始（今週） - ${programName}`);
     
+    // デバッグ: WebApp入力パラメータを記録
+    debugOutputJSON('6-WEBAPP-INPUT', { programName, weekType: 'thisWeek' }, 'webAppGetProgramDataThisWeek入力パラメータ');
+    
     const config = getConfig();
     const spreadsheet = SpreadsheetApp.openById(config.SPREADSHEET_ID);
     const thisWeekSheet = getSheetByWeek(spreadsheet, 0);
@@ -395,6 +471,9 @@ function webAppGetProgramDataThisWeek(programName: string) {
     
     // 今週のデータを抽出（プログラム優先構造）
     const rawWeekData = extractStructuredWeekData(thisWeekSheet);
+    
+    // デバッグ: 生週データを記録
+    debugOutputJSON('7-RAW-WEEK-DATA', rawWeekData, `生週データ: ${thisWeekSheet.getName()}`);
     console.log(`抽出されたデータの番組名:`, Object.keys(rawWeekData || {}));
     
     if (!rawWeekData) {
@@ -404,6 +483,9 @@ function webAppGetProgramDataThisWeek(programName: string) {
     // プログラム優先を曜日優先に変換
     const weekData = transformProgramDataToWeekData(rawWeekData);
     console.log(`変換後のデータ構造:`, Object.keys(weekData || {}));
+    
+    // デバッグ: データ変換後を記録
+    debugOutputJSON('8-TRANSFORMED-WEEK-DATA', weekData, `データ変換後（番組→曜日優先）: ${programName}`);
     
     // 指定番組が任意の曜日に存在するかチェック
     let programFound = false;
@@ -420,7 +502,8 @@ function webAppGetProgramDataThisWeek(programName: string) {
     }
     
     console.log(`WebApp: 番組データ取得成功（今週） - ${programName}`);
-    return {
+    
+    const finalResult = {
       success: true,
       programName: programName,
       weekType: 'thisWeek',
@@ -428,6 +511,11 @@ function webAppGetProgramDataThisWeek(programName: string) {
       sheetName: thisWeekSheet.getName(),
       timestamp: new Date().toISOString()
     };
+    
+    // デバッグ: 最終WebApp戻り値を記録
+    debugOutputJSON('9-WEBAPP-FINAL-OUTPUT', finalResult, `webAppGetProgramDataThisWeek最終出力: ${programName}`);
+    
+    return finalResult;
     
   } catch (error: unknown) {
     console.error(`WebApp: 番組データ取得エラー（今週） - ${programName}`, error);
@@ -448,6 +536,9 @@ function webAppGetProgramDataNextWeek(programName: string) {
   try {
     console.log(`WebApp: 番組データ取得開始（翌週） - ${programName}`);
     
+    // デバッグ: WebApp入力パラメータを記録
+    debugOutputJSON('6-WEBAPP-INPUT', { programName, weekType: 'nextWeek' }, 'webAppGetProgramDataNextWeek入力パラメータ');
+    
     const config = getConfig();
     const spreadsheet = SpreadsheetApp.openById(config.SPREADSHEET_ID);
     const nextWeekSheet = getSheetByWeek(spreadsheet, 1);
@@ -460,6 +551,9 @@ function webAppGetProgramDataNextWeek(programName: string) {
     
     // 翌週のデータを抽出（プログラム優先構造）
     const rawWeekData = extractStructuredWeekData(nextWeekSheet);
+    
+    // デバッグ: 生週データを記録
+    debugOutputJSON('7-RAW-WEEK-DATA', rawWeekData, `生週データ: ${nextWeekSheet.getName()}`);
     console.log(`抽出されたデータの番組名:`, Object.keys(rawWeekData || {}));
     
     if (!rawWeekData) {
@@ -469,6 +563,9 @@ function webAppGetProgramDataNextWeek(programName: string) {
     // プログラム優先を曜日優先に変換
     const weekData = transformProgramDataToWeekData(rawWeekData);
     console.log(`変換後のデータ構造:`, Object.keys(weekData || {}));
+    
+    // デバッグ: データ変換後を記録
+    debugOutputJSON('8-TRANSFORMED-WEEK-DATA', weekData, `データ変換後（番組→曜日優先）: ${programName}`);
     
     // 指定番組が任意の曜日に存在するかチェック
     let programFound = false;
@@ -485,7 +582,8 @@ function webAppGetProgramDataNextWeek(programName: string) {
     }
     
     console.log(`WebApp: 番組データ取得成功（翌週） - ${programName}`);
-    return {
+    
+    const finalResult = {
       success: true,
       programName: programName,
       weekType: 'nextWeek',
@@ -493,6 +591,11 @@ function webAppGetProgramDataNextWeek(programName: string) {
       sheetName: nextWeekSheet.getName(),
       timestamp: new Date().toISOString()
     };
+    
+    // デバッグ: 最終WebApp戻り値を記録
+    debugOutputJSON('9-WEBAPP-FINAL-OUTPUT', finalResult, `webAppGetProgramDataNextWeek最終出力: ${programName}`);
+    
+    return finalResult;
     
   } catch (error: unknown) {
     console.error(`WebApp: 番組データ取得エラー（翌週） - ${programName}`, error);
@@ -1811,22 +1914,135 @@ function showAvailableSheets() {
  * 番号で週を指定して抽出（番組別表示）
  */
 function extractWeekByNumber(number) {
-  const config = getConfig();
-  const spreadsheet = SpreadsheetApp.openById(config.SPREADSHEET_ID);
-  const allSheets = spreadsheet.getSheets();
+  console.log(`[DEBUG] ★★★ extractWeekByNumber 開始 ★★★`);
+  console.log(`[DEBUG] extractWeekByNumber: リクエスト番号 = ${number}`);
+  console.log(`[DEBUG] 現在時刻: ${new Date().toISOString()}`);
+  
+  try {
+    const config = getConfig();
+    console.log(`[DEBUG] CONFIG取得成功`);
+    
+    console.log(`[DEBUG] スプレッドシート接続中: ID = ${config.SPREADSHEET_ID}`);
+    const spreadsheet = SpreadsheetApp.openById(config.SPREADSHEET_ID);
+    console.log(`[DEBUG] スプレッドシート接続成功`);
+    
+    console.log(`[DEBUG] シート一覧取得中...`);
+    const allSheets = spreadsheet.getSheets();
+    console.log(`[DEBUG] スプレッドシート内の全シート数: ${allSheets.length}`);
   
   const weekSheets = [];
   allSheets.forEach(sheet => {
     const sheetName = sheet.getName();
+    console.log(`[DEBUG] シート名チェック: "${sheetName}"`);
     if (sheetName.match(/^\d{2}\.\d{1,2}\.\d{2}-/)) {
       weekSheets.push(sheetName);
+      console.log(`[DEBUG] 週シートとして認識: "${sheetName}"`);
     }
   });
   
-  weekSheets.sort();
+  // シート名から日付範囲を解析する関数
+  const parseSheetDateRange = (sheetName: string): {start: Date, end: Date} | null => {
+    const match = sheetName.match(/^(\d{2})\.(\d{1,2})\.(\d{1,2})-(\d{1,2})\.(\d{1,2})$/);
+    if (!match) return null;
+    
+    const year = 2000 + parseInt(match[1]);
+    const startMonth = parseInt(match[2]) - 1; // 0-indexed
+    const startDay = parseInt(match[3]);
+    const endMonth = parseInt(match[4]) - 1; // 0-indexed
+    const endDay = parseInt(match[5]);
+    
+    // 年末年始跨ぎの対応
+    let endYear = year;
+    if (endMonth < startMonth) {
+      endYear = year + 1;
+    }
+    
+    return {
+      start: new Date(year, startMonth, startDay),
+      end: new Date(endYear, endMonth, endDay)
+    };
+  };
+  
+  // 現在日時を取得
+  const now = new Date();
+  console.log(`[DEBUG] 現在日時: ${now.toLocaleDateString('ja-JP')} (${now.toISOString()})`);
+  
+  // number=1の場合は現在を含む週を探す
+  if (number === 1) {
+    console.log(`[DEBUG] ★ 今週（現在を含む週）を検索中...`);
+    console.log(`[DEBUG] 検索対象シート数: ${weekSheets.length}`);
+    console.log(`[DEBUG] 週シート一覧:`, weekSheets);
+    
+    let foundCurrentWeek = false;
+    
+    for (let i = 0; i < weekSheets.length; i++) {
+      const sheetName = weekSheets[i];
+      console.log(`[DEBUG] ${i+1}/${weekSheets.length}: シート "${sheetName}" をチェック中...`);
+      
+      const range = parseSheetDateRange(sheetName);
+      console.log(`[DEBUG] parseSheetDateRange結果:`, range);
+      
+      if (range) {
+        const startDateStr = range.start.toLocaleDateString('ja-JP');
+        const endDateStr = range.end.toLocaleDateString('ja-JP');
+        const nowStr = now.toLocaleDateString('ja-JP');
+        
+        console.log(`[DEBUG] シート "${sheetName}" の日付範囲: ${startDateStr} 〜 ${endDateStr}`);
+        console.log(`[DEBUG] 現在日時: ${nowStr} (${now.toISOString()})`);
+        console.log(`[DEBUG] 範囲チェック: ${nowStr} >= ${startDateStr} && ${nowStr} <= ${endDateStr}`);
+        console.log(`[DEBUG] 範囲チェック結果: ${now >= range.start} && ${now <= range.end} = ${now >= range.start && now <= range.end}`);
+        
+        // 現在日時がこの週の範囲内かチェック
+        if (now >= range.start && now <= range.end) {
+          console.log(`[DEBUG] ★★★ 今週発見: "${sheetName}" （現在日時が範囲内）★★★`);
+          foundCurrentWeek = true;
+          
+          console.log(`[DEBUG] extractSpecificWeekByProgram("${sheetName}")を呼び出し中...`);
+          
+          try {
+            const result = extractSpecificWeekByProgram(sheetName);
+            console.log(`[DEBUG] extractSpecificWeekByProgram正常完了`);
+            console.log(`[DEBUG] 結果タイプ:`, typeof result);
+            console.log(`[DEBUG] 結果キー数:`, Object.keys(result || {}).length);
+            console.log(`[DEBUG] 結果キー一覧:`, Object.keys(result || {}));
+            console.log(`[DEBUG] プログラムデータを直接返却`);
+            console.log(`[DEBUG] 最終戻り値:`, typeof result, Object.keys(result));
+            return result;
+            
+          } catch (error: unknown) {
+            console.error(`[ERROR] extractSpecificWeekByProgram("${sheetName}")でエラー:`, error);
+            console.error(`[ERROR] エラー詳細:`, error instanceof Error ? error.message : String(error));
+            console.error(`[ERROR] スタックトレース:`, error instanceof Error ? error.stack : '');
+            // エラーが発生しても処理を続行
+          }
+        } else {
+          console.log(`[DEBUG] 範囲外: "${sheetName}" は今週ではない`);
+        }
+      } else {
+        console.log(`[DEBUG] 日付解析失敗: "${sheetName}"`);
+      }
+    }
+    
+    if (!foundCurrentWeek) {
+      console.log(`[DEBUG] ⚠️ 現在を含む週が見つからない。最新の週を使用します。`);
+      console.log(`[DEBUG] 現在日時: ${now.toLocaleDateString('ja-JP')} (${now.toISOString()})`);
+    }
+  }
+  
+  // 日付ベースでソート（最新から順番に）
+  weekSheets.sort((a, b) => {
+    const rangeA = parseSheetDateRange(a);
+    const rangeB = parseSheetDateRange(b);
+    
+    if (!rangeA || !rangeB) return 0;
+    return rangeB.start.getTime() - rangeA.start.getTime(); // 新しい順（最新週が先頭）
+  });
+  
+  console.log(`[DEBUG] 検出した週シート数: ${weekSheets.length}`);
+  console.log(`[DEBUG] 週シート一覧（日付順）:`, weekSheets);
   
   if (number < 1 || number > weekSheets.length) {
-    console.log(`番号は1から${weekSheets.length}の間で指定してください`);
+    console.log(`[ERROR] 番号は1から${weekSheets.length}の間で指定してください`);
     console.log('利用可能な週:');
     weekSheets.forEach((sheetName, index) => {
       console.log(`${index + 1}. ${sheetName}`);
@@ -1835,9 +2051,28 @@ function extractWeekByNumber(number) {
   }
   
   const targetSheet = weekSheets[number - 1];
-  console.log(`${number}番目の週を抽出: ${targetSheet}`);
+  console.log(`[DEBUG] 選択されたシート: "${targetSheet}"`);
+  console.log(`[DEBUG] extractSpecificWeekByProgramを呼び出し中...`);
   
-  return extractSpecificWeekByProgram(targetSheet);
+  console.log(`[DEBUG] extractSpecificWeekByProgram("${targetSheet}")を詳細デバッグで呼び出し中...`);
+  const result = extractSpecificWeekByProgram(targetSheet);
+  console.log(`[DEBUG] extractSpecificWeekByProgramの結果:`, typeof result, Object.keys(result).length, Object.keys(result));
+  console.log(`[DEBUG] extractSpecificWeekByProgram結果の詳細構造:`);
+  if (result && typeof result === 'object') {
+    Object.keys(result).forEach(key => {
+      console.log(`[DEBUG]   ${key}: ${typeof result[key]} (${result[key] ? Object.keys(result[key]).length : 0}個のプロパティ)`);
+    });
+  }
+  
+  console.log(`[DEBUG] ★★★ extractWeekByNumber 完了 ★★★`);
+  return result;
+  
+  } catch (error: unknown) {
+    console.error(`[ERROR] extractWeekByNumber内でエラー:`, error);
+    console.error(`[ERROR] エラー詳細:`, error instanceof Error ? error.message : String(error));
+    console.error(`[ERROR] スタックトレース:`, error instanceof Error ? error.stack : '');
+    return {};
+  }
 }
 
 /**
@@ -2018,34 +2253,84 @@ function extractRelativeWeekAndSendEmailAndCreateDocs(weekOffset) {
  * 指定した週を抽出（番組別表示）
  */
 function extractSpecificWeekByProgram(sheetName) {
+  console.log(`[DEBUG] extractSpecificWeekByProgram: シート名 = "${sheetName}"`);
+  console.log(`[DEBUG] 検索対象シート名の詳細: 長さ=${sheetName.length}, 文字コード=[${Array.from(sheetName).map((c: string) => c.charCodeAt(0)).join(',')}]`);
+  
   const config = getConfig();
   
   try {
+    console.log(`[DEBUG] スプレッドシート取得開始: ID=${config.SPREADSHEET_ID}`);
     const spreadsheet = SpreadsheetApp.openById(config.SPREADSHEET_ID);
+    console.log(`[DEBUG] スプレッドシート取得成功`);
+    
+    // 全シート名を詳細取得
+    console.log(`[DEBUG] 全シート一覧を取得中...`);
+    const allSheets = spreadsheet.getSheets();
+    console.log(`[DEBUG] 全シート数: ${allSheets.length}`);
+    
+    const allSheetNames = [];
+    const weekSheets = [];
+    allSheets.forEach((s, index) => {
+      const name = s.getName();
+      allSheetNames.push(name);
+      console.log(`[DEBUG] シート${index}: "${name}" (長さ=${name.length}, 文字コード=[${Array.from(name).map((c: string) => c.charCodeAt(0)).join(',')}])`);
+      
+      if (name.match(/^\d{2}\.\d{1,2}\.\d{2}-/)) {
+        weekSheets.push(name);
+        
+        // 検索対象と完全一致チェック
+        if (name === sheetName) {
+          console.log(`[DEBUG] ★ 完全一致発見: "${name}"`);
+        } else {
+          console.log(`[DEBUG] 不一致: "${name}" vs "${sheetName}"`);
+        }
+      }
+    });
+    
+    console.log(`[DEBUG] 全シート名:`, allSheetNames);
+    console.log(`[DEBUG] 週シート名:`, weekSheets);
+    
+    console.log(`[DEBUG] getSheetByName("${sheetName}")を実行中...`);
     const sheet = spreadsheet.getSheetByName(sheetName);
+    console.log(`[DEBUG] getSheetByName結果: ${sheet ? 'SUCCESS' : 'NULL'}`);
     
     if (!sheet) {
-      console.log(`指定されたシート「${sheetName}」が見つかりません`);
+      console.log(`[ERROR] 指定されたシート「${sheetName}」が見つかりません`);
+      console.log(`[ERROR] 検索シート名: "${sheetName}" (${sheetName.length}文字)`);
       
-      const allSheets = spreadsheet.getSheets();
-      const availableSheets = [];
-      allSheets.forEach(s => {
-        if (s.getName().match(/^\d{2}\.\d{1,2}\.\d{2}-/)) {
-          availableSheets.push(s.getName());
+      // 類似シート名を検索
+      console.log(`[DEBUG] 類似シート名検索中...`);
+      const normalizedTarget = sheetName.trim().replace(/\s+/g, '');
+      for (const availableSheet of weekSheets) {
+        const normalizedAvailable = availableSheet.trim().replace(/\s+/g, '');
+        console.log(`[DEBUG] 比較: "${normalizedTarget}" vs "${normalizedAvailable}"`);
+        
+        if (normalizedTarget === normalizedAvailable) {
+          console.log(`[DEBUG] ★ 正規化後一致: "${availableSheet}"`);
+          const matchedSheet = spreadsheet.getSheetByName(availableSheet);
+          if (matchedSheet) {
+            console.log(`[DEBUG] 類似シートでアクセス成功、処理続行`);
+            return extractSpecificWeekByProgram(availableSheet); // 再帰呼び出し
+          }
         }
-      });
+      }
       
-      console.log('利用可能なシート名:', availableSheets);
+      console.log('[ERROR] 利用可能なシート名:', weekSheets);
       return {};
     }
     
-    console.log(`Processing specified week: ${sheetName}`);
+    console.log(`[DEBUG] シートを発見: ${sheetName}, extractStructuredWeekDataを呼び出し中...`);
     const weekData = extractStructuredWeekData(sheet);
+    console.log(`[DEBUG] extractStructuredWeekDataの結果:`, typeof weekData, weekData ? Object.keys(weekData) : 'null');
     
     if (!weekData || typeof weekData !== 'object') {
-      console.error('週データの抽出に失敗しました');
+      console.error('[ERROR] 週データの抽出に失敗しました');
+      console.log('[ERROR] weekDataの値:', weekData);
       return {};
     }
+    
+    console.log(`[DEBUG] 週データの番組数: ${Object.keys(weekData).length}`);
+    console.log(`[DEBUG] 週データの番組名:`, Object.keys(weekData));
     
     const results = { [sheetName]: weekData };
     
@@ -2397,29 +2682,98 @@ function formatProgramDataForEmail(allResults) {
  * 週を指定してシートを取得
  */
 function getSheetByWeek(spreadsheet, weekOffset) {
-  const today = new Date();
-  const targetDate = new Date(today.getTime() + (weekOffset * 7 * 24 * 60 * 60 * 1000));
+  console.log(`[DEBUG] ★★★ getSheetByWeek 開始 ★★★`);
+  console.log(`[DEBUG] 呼び出し元情報: ${(new Error()).stack}`);
+  console.log(`[DEBUG] weekOffset: ${weekOffset} (type: ${typeof weekOffset})`);
+  console.log(`[DEBUG] spreadsheet: ${spreadsheet ? 'OK' : 'NULL'} (type: ${typeof spreadsheet})`);
   
-  const dayOfWeek = targetDate.getDay() === 0 ? 7 : targetDate.getDay();
-  const monday = new Date(targetDate.getTime() - (dayOfWeek - 1) * 24 * 60 * 60 * 1000);
-  const sunday = new Date(monday.getTime() + 6 * 24 * 60 * 60 * 1000);
-  
-  const mondayYear = monday.getFullYear().toString().slice(-2);
-  const mondayMonth = (monday.getMonth() + 1).toString();
-  const mondayDay = monday.getDate().toString().padStart(2, '0');
-  
-  const sundayMonth = (sunday.getMonth() + 1).toString();
-  const sundayDay = sunday.getDate().toString().padStart(2, '0');
-  
-  const sheetName = `${mondayYear}.${mondayMonth}.${mondayDay}-${sundayMonth}.${sundayDay}`;
-  
-  console.log(`Looking for sheet (offset ${weekOffset}): ${sheetName}`);
-  
-  const sheet = spreadsheet.getSheetByName(sheetName);
-  if (!sheet) {
-    console.warn(`Sheet not found: ${sheetName}`);
+  // 防御的パラメータ検証
+  if (spreadsheet === null || spreadsheet === undefined) {
+    console.error(`[ERROR] spreadsheetパラメータがnull/undefinedです`);
+    console.error(`[ERROR] 呼び出し元を確認してください`);
+    return null;
   }
   
+  if (weekOffset === null || weekOffset === undefined) {
+    console.error(`[ERROR] weekOffsetパラメータがnull/undefinedです`);
+    console.log(`[DEBUG] デフォルト値 weekOffset = 0 を使用します`);
+    weekOffset = 0;
+  }
+  
+  if (typeof weekOffset !== 'number' || isNaN(weekOffset)) {
+    console.error(`[ERROR] weekOffsetが数値ではありません: ${weekOffset}`);
+    console.log(`[DEBUG] デフォルト値 weekOffset = 0 を使用します`);
+    weekOffset = 0;
+  }
+  
+  console.log(`[DEBUG] 検証後 weekOffset: ${weekOffset}`);
+  
+  const today = new Date();
+  console.log(`[DEBUG] 今日の日付: ${today.toISOString()}`);
+  
+  const millisecondsOffset = weekOffset * 7 * 24 * 60 * 60 * 1000;
+  console.log(`[DEBUG] ミリ秒オフセット: ${millisecondsOffset}`);
+  
+  const targetDate = new Date(today.getTime() + millisecondsOffset);
+  console.log(`[DEBUG] ターゲット日付: ${targetDate.toISOString()}`);
+  
+  const dayOfWeek = targetDate.getDay() === 0 ? 7 : targetDate.getDay();
+  console.log(`[DEBUG] 曜日番号: ${dayOfWeek} (${targetDate.getDay()})`);
+  
+  const monday = new Date(targetDate.getTime() - (dayOfWeek - 1) * 24 * 60 * 60 * 1000);
+  const sunday = new Date(monday.getTime() + 6 * 24 * 60 * 60 * 1000);
+  console.log(`[DEBUG] 月曜日: ${monday.toISOString()}`);
+  console.log(`[DEBUG] 日曜日: ${sunday.toISOString()}`);
+  
+  const mondayYear = monday.getFullYear();
+  const mondayMonth = monday.getMonth() + 1;
+  const mondayDay = monday.getDate();
+  
+  const sundayMonth = sunday.getMonth() + 1;
+  const sundayDay = sunday.getDate();
+  
+  console.log(`[DEBUG] 月曜日データ: ${mondayYear}年${mondayMonth}月${mondayDay}日`);
+  console.log(`[DEBUG] 日曜日データ: ${sunday.getFullYear()}年${sundayMonth}月${sundayDay}日`);
+  
+  const mondayYearStr = mondayYear.toString().slice(-2);
+  const mondayMonthStr = mondayMonth.toString();
+  const mondayDayStr = mondayDay.toString().padStart(2, '0');
+  
+  const sundayMonthStr = sundayMonth.toString();
+  const sundayDayStr = sundayDay.toString().padStart(2, '0');
+  
+  console.log(`[DEBUG] 文字列変換後:`);
+  console.log(`[DEBUG] - mondayYearStr: "${mondayYearStr}"`);
+  console.log(`[DEBUG] - mondayMonthStr: "${mondayMonthStr}"`);  
+  console.log(`[DEBUG] - mondayDayStr: "${mondayDayStr}"`);
+  console.log(`[DEBUG] - sundayMonthStr: "${sundayMonthStr}"`);
+  console.log(`[DEBUG] - sundayDayStr: "${sundayDayStr}"`);
+  
+  const sheetName = `${mondayYearStr}.${mondayMonthStr}.${mondayDayStr}-${sundayMonthStr}.${sundayDayStr}`;
+  
+  console.log(`[DEBUG] 生成されたシート名: "${sheetName}"`);
+  console.log(`Looking for sheet (offset ${weekOffset}): ${sheetName}`);
+  
+  if (!spreadsheet) {
+    console.error(`[ERROR] spreadsheetがnull/undefinedです`);
+    return null;
+  }
+  
+  const sheet = spreadsheet.getSheetByName(sheetName);
+  console.log(`[DEBUG] getSheetByName結果: ${sheet ? 'FOUND' : 'NOT_FOUND'}`);
+  
+  if (!sheet) {
+    console.warn(`Sheet not found: ${sheetName}`);
+    
+    // 利用可能なシート一覧を表示
+    const allSheets = spreadsheet.getSheets();
+    console.log(`[DEBUG] 利用可能な全シート数: ${allSheets.length}`);
+    allSheets.forEach((s, index) => {
+      console.log(`[DEBUG] シート${index}: "${s.getName()}"`);
+    });
+  }
+  
+  console.log(`[DEBUG] ★★★ getSheetByWeek 完了 ★★★`);
   return sheet;
 }
 
@@ -2427,22 +2781,95 @@ function getSheetByWeek(spreadsheet, weekOffset) {
  * 1つの週のデータを構造化して抽出
  */
 function extractStructuredWeekData(sheet) {
-  const markers = findMarkerRows(sheet);
-  console.log('Markers found for', sheet.getName(), ':', markers);
+  console.log(`[DEBUG] extractStructuredWeekData開始`);
   
-  const dateRanges = getDateRanges(markers);
-  console.log('Date ranges for', sheet.getName(), ':', dateRanges);
+  if (!sheet) {
+    console.error(`[ERROR] extractStructuredWeekData: sheetがnull/undefinedです`);
+    return {};
+  }
   
-  const results = extractAndStructurePrograms(sheet, dateRanges, markers);
+  if (typeof sheet.getName !== 'function') {
+    console.error(`[ERROR] extractStructuredWeekData: sheetオブジェクトが無効です`, sheet);
+    return {};
+  }
   
-  return results;
+  const sheetName = sheet.getName();
+  console.log(`[DEBUG] extractStructuredWeekData: シート名 = "${sheetName}"`);
+  
+  // デバッグ: 入力データを記録
+  debugOutputJSON('1-INPUT-SHEET', {
+    sheetName: sheetName,
+    sheetType: typeof sheet,
+    hasGetName: typeof sheet.getName
+  }, `extractStructuredWeekData入力: ${sheetName}`);
+  
+  try {
+    console.log(`[DEBUG] findMarkerRows呼び出し中...`);
+    const markers = findMarkerRows(sheet);
+    console.log('Markers found for', sheetName, ':', markers);
+    
+    // デバッグ: マーカー検出結果を記録
+    debugOutputJSON('2-MARKERS-DETECTED', markers, `マーカー検出結果: ${sheetName}`);
+    
+    console.log(`[DEBUG] getDateRanges呼び出し中...`);
+    const dateRanges = getDateRanges(markers);
+    console.log('Date ranges for', sheetName, ':', dateRanges);
+    
+    // デバッグ: 日付範囲計算結果を記録
+    debugOutputJSON('3-DATE-RANGES', dateRanges, `日付範囲計算結果: ${sheetName}`);
+    
+    console.log(`[DEBUG] extractAndStructurePrograms呼び出し中...`);
+    const results = extractAndStructurePrograms(sheet, dateRanges, markers);
+    
+    console.log(`[DEBUG] extractAndStructurePrograms結果:`, typeof results);
+    console.log(`[DEBUG] results のキー:`, Object.keys(results || {}));
+    console.log(`[DEBUG] results の詳細構造:`);
+    
+    // デバッグ: 番組構造化結果を記録
+    debugOutputJSON('4-STRUCTURED-PROGRAMS', results, `番組構造化結果: ${sheetName}`);
+    
+    if (results && typeof results === 'object') {
+      for (const [programName, programData] of Object.entries(results)) {
+        console.log(`[DEBUG] 番組: "${programName}" (タイプ: ${typeof programData})`);
+        if (programData && typeof programData === 'object') {
+          console.log(`[DEBUG] 　曜日: [${Object.keys(programData).join(', ')}]`);
+        } else {
+          console.log(`[DEBUG] 　データ: ${programData}`);
+        }
+      }
+    } else {
+      console.log(`[DEBUG] results が無効: ${results}`);
+    }
+    
+    // デバッグ: 最終出力データを記録
+    debugOutputJSON('5-FINAL-WEEK-DATA', results, `extractStructuredWeekData最終出力: ${sheetName}`);
+    
+    return results;
+    
+  } catch (error: unknown) {
+    console.error(`[ERROR] extractStructuredWeekData内でエラー:`, error);
+    console.error(`[ERROR] エラーの詳細:`, error instanceof Error ? error.message : String(error));
+    console.error(`[ERROR] スタックトレース:`, error instanceof Error ? error.stack : '');
+    
+    // デバッグ: エラー情報を記録
+    debugOutputJSON('5-ERROR-WEEK-DATA', {
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : '',
+      sheetName: sheet?.getName?.() || 'unknown'
+    }, `extractStructuredWeekDataエラー`);
+    
+    return {};
+  }
 }
 
 /**
  * 区切り行（マーカー）を特定する
  */
 function findMarkerRows(sheet) {
+  console.log(`[DEBUG] ★★★ findMarkerRows デバッグ開始 ★★★`);
   const data = sheet.getDataRange().getValues();
+  console.log(`[DEBUG] シートデータサイズ: ${data.length} x ${data[0]?.length || 0}`);
+  
   const rsRows = [];
   let newFridayRow = -1;
   let theBurnRow = -1;
@@ -2457,9 +2884,29 @@ function findMarkerRows(sheet) {
     }
   }
   
+  // デバッグ: 備考列の内容を確認
+  console.log(`備考列インデックス: ${remarksCol}`);
+  if (remarksCol >= 0) {
+    console.log('備考列の内容（最初の20行）:');
+    for (let i = 0; i < Math.min(20, data.length); i++) {
+      if (data[i][remarksCol]) {
+        console.log(`行${i}: "${data[i][remarksCol]}"`);
+      }
+    }
+  }
+  
   for (let i = 0; i < data.length; i++) {
-    if (remarksCol >= 0 && data[i][remarksCol] && data[i][remarksCol].toString().includes('RS')) {
-      rsRows.push(i);
+    if (remarksCol >= 0 && data[i][remarksCol]) {
+      const cellValue = data[i][remarksCol].toString().trim();
+      // より柔軟なRS検出（大文字小文字、全角半角対応）
+      if (cellValue.toUpperCase().includes('RS') || 
+          cellValue.includes('ＲＳ') || 
+          cellValue.includes('ラジオショッピング') ||
+          cellValue === 'RS' ||
+          cellValue === 'ＲＳ') {
+        console.log(`RS検出 行${i}: "${cellValue}"`);
+        rsRows.push(i);
+      }
     }
     
     if (data[i].some(cell => cell && cell.toString().includes('New!Friday'))) {
@@ -2480,6 +2927,9 @@ function findMarkerRows(sheet) {
     }
   }
   
+  console.log(`検出されたRS行数: ${rsRows.length}`);
+  console.log(`RS行位置: ${rsRows}`);
+  
   return { rsRows, newFridayRow, theBurnRow, mantenRow, chuuiRow, remarksCol };
 }
 
@@ -2487,9 +2937,40 @@ function findMarkerRows(sheet) {
  * 各曜日のデータ範囲を決定
  */
 function getDateRanges(markers: any): DateRanges {
+  console.log(`[DEBUG] ★★★ getDateRanges デバッグ開始 ★★★`);
   const { rsRows, newFridayRow, theBurnRow, mantenRow, chuuiRow } = markers;
   
+  console.log(`[DEBUG] マーカー詳細情報:`);
+  console.log(`[DEBUG]   rsRows: [${rsRows.join(', ')}] (${rsRows.length}個)`);
+  console.log(`[DEBUG]   newFridayRow: ${newFridayRow}`);
+  console.log(`[DEBUG]   theBurnRow: ${theBurnRow}`);
+  console.log(`[DEBUG]   mantenRow: ${mantenRow}`);
+  console.log(`[DEBUG]   chuuiRow: ${chuuiRow}`);
+  
   if (rsRows.length < 4) {
+    console.error(`RS行が不足しています。検出数: ${rsRows.length}, 必要数: 4以上`);
+    console.error(`その他のマーカー情報:`, {
+      newFridayRow,
+      theBurnRow,
+      mantenRow,
+      chuuiRow
+    });
+    
+    // RS行が不足している場合は金土日のみ抽出できるよう制限
+    if (rsRows.length === 0) {
+      console.log('RS行が全く見つからないため、金土日のみ処理を試行します');
+      // 金曜日以降のデータ範囲のみ返す
+      return {
+        monday: { start: -1, end: -1 },
+        tuesday: { start: -1, end: -1 },
+        wednesday: { start: -1, end: -1 },
+        thursday: { start: -1, end: -1 },
+        friday: newFridayRow >= 0 ? { start: newFridayRow, end: theBurnRow - 1 } : { start: -1, end: -1 },
+        saturday: theBurnRow >= 0 && mantenRow >= 0 ? { start: theBurnRow + 1, end: mantenRow - 1 } : { start: -1, end: -1 },
+        sunday: mantenRow >= 0 && chuuiRow >= 0 ? { start: mantenRow + 1, end: chuuiRow - 1 } : { start: -1, end: -1 }
+      };
+    }
+    
     throw new Error(`RS行が4つ見つからない。見つかった数: ${rsRows.length}`);
   }
   
@@ -2568,6 +3049,22 @@ function extractAndStructurePrograms(sheet, dateRanges, markers) {
   const headerRow = data[0];
   const { rsRows, theBurnRow, remarksCol } = markers;
   
+  console.log(`[DEBUG] ★★★ extractAndStructurePrograms デバッグ開始 ★★★`);
+  console.log(`[DEBUG] ヘッダー行の長さ: ${headerRow.length}`);
+  console.log(`[DEBUG] ヘッダー行の内容詳細:`);
+  headerRow.forEach((cell, index) => {
+    if (cell && cell.toString().trim()) {
+      console.log(`[DEBUG]   列${index}: "${cell}" (タイプ: ${typeof cell}, 長さ: ${cell.toString().length})`);
+      const cellStr = cell.toString();
+      console.log(`[DEBUG]     文字コード: [${Array.from(cellStr).map((c: string) => c.charCodeAt(0)).join(', ')}]`);
+      console.log(`[DEBUG]     'ちょうどいいラジオ'を含む: ${cell.toString().includes('ちょうどいいラジオ')}`);
+      console.log(`[DEBUG]     'PRIME TIME'を含む: ${cell.toString().includes('PRIME TIME')}`);
+    }
+  });
+  
+  console.log(`[DEBUG] マーカー情報: rsRows=${rsRows?.length || 0}個, theBurnRow=${theBurnRow}, remarksCol=${remarksCol}`);
+  console.log(`[DEBUG] 日付範囲:`, Object.keys(dateRanges));
+  
   const results = {};
   
   const dayDates = calculateDayDates(sheet.getName());
@@ -2580,10 +3077,14 @@ function extractAndStructurePrograms(sheet, dateRanges, markers) {
   // 収録予定を事前に取得
   const recordingSchedules = extractRecordingSchedules(startDate);
   
+  console.log(`[DEBUG] 平日番組処理開始`);
   ['monday', 'tuesday', 'wednesday', 'thursday'].forEach(day => {
+    console.log(`[DEBUG] ${day}の処理開始`);
     headerRow.forEach((program, colIndex) => {
       if (program && program.toString().includes('ちょうどいいラジオ')) {
+        console.log(`[DEBUG] ★ 'ちょうどいいラジオ'を発見! 列${colIndex}, ${day}`);  
         const rawContent = extractColumnData(data, colIndex, dateRanges[day]);
+        console.log(`[デバッグ] ちょうどいいラジオ ${day}: rawContent =`, rawContent, typeof rawContent, Array.isArray(rawContent));
         const remarksData = extractRemarksData(data, remarksCol, dateRanges[day]);
         if (!results['ちょうどいいラジオ']) results['ちょうどいいラジオ'] = {};
         
@@ -2605,7 +3106,9 @@ function extractAndStructurePrograms(sheet, dateRanges, markers) {
       }
       
       if (program && program.toString().includes('PRIME TIME')) {
+        console.log(`[DEBUG] ★ 'PRIME TIME'を発見! 列${colIndex}, ${day}`);  
         const rawContent = extractColumnData(data, colIndex, dateRanges[day]);
+        console.log(`[デバッグ] PRIME TIME ${day}: rawContent =`, rawContent, typeof rawContent, Array.isArray(rawContent));
         if (!results['PRIME TIME']) results['PRIME TIME'] = {};
         
         results['PRIME TIME'][day] = structurePrimeTime(rawContent, dayDates[day], musicDatabase);
@@ -2628,6 +3131,7 @@ function extractAndStructurePrograms(sheet, dateRanges, markers) {
     fridayHeaderRow.forEach((program, colIndex) => {
       if (program && program.toString().includes('FLAG')) {
         const rawContent = extractColumnData(data, colIndex, dateRanges.friday);
+        console.log(`[デバッグ] FLAG friday: rawContent =`, rawContent, typeof rawContent, Array.isArray(rawContent));
         if (!results['FLAG']) results['FLAG'] = {};
         
         results['FLAG']['friday'] = structureFlag(rawContent, dayDates.friday, musicDatabase);
@@ -2640,6 +3144,7 @@ function extractAndStructurePrograms(sheet, dateRanges, markers) {
     saturdayHeaderRow.forEach((program, colIndex) => {
       if (program && program.toString().includes('God Bless Saturday')) {
         const rawContent = extractColumnData(data, colIndex, dateRanges.saturday);
+        console.log(`[デバッグ] God Bless Saturday: rawContent =`, rawContent, typeof rawContent, Array.isArray(rawContent));
         if (!results['God Bless Saturday']) results['God Bless Saturday'] = {};
         
         results['God Bless Saturday']['saturday'] = structureGodBless(rawContent, dayDates.saturday, musicDatabase);
@@ -2647,12 +3152,20 @@ function extractAndStructurePrograms(sheet, dateRanges, markers) {
       
       if (program && program.toString().includes('Route 847')) {
         const rawContent = extractColumnData(data, colIndex, dateRanges.saturday);
+        console.log(`[デバッグ] Route 847: rawContent =`, rawContent, typeof rawContent, Array.isArray(rawContent));
         if (!results['Route 847']) results['Route 847'] = {};
         
         results['Route 847']['saturday'] = structureRoute847(rawContent, dayDates.saturday, musicDatabase);
       }
     });
   }
+  
+  console.log(`[DEBUG] ★★★ extractAndStructurePrograms 結果 ★★★`);
+  console.log(`[DEBUG] 検出された番組数: ${Object.keys(results).length}`);
+  console.log(`[DEBUG] 番組名一覧: [${Object.keys(results).join(', ')}]`);
+  Object.keys(results).forEach(programName => {
+    console.log(`[DEBUG] ${programName}: 曜日数=${Object.keys(results[programName]).length}`);
+  });
   
   return results;
 }
@@ -2944,6 +3457,25 @@ function getAdvanceBookingFromCurrentSheet(sheet) {
  * ちょうどいいラジオの構造化（統一版）
  */
 function structureChoudo(content, date, remarksData, musicDatabase, startDate, currentSheet) {
+  // nullチェックでエラーを防止
+  if (!content || !Array.isArray(content)) {
+    console.warn('structureChoudo: contentがnullまたは配列ではありません');
+    console.log('contentの値:', content);
+    return {
+      '日付': [date],
+      '7:28パブ告知': ['ー'],
+      '時間指定なし告知': ['ー'],
+      'YOKOHAMA PORTSIDE INFORMATION': ['ー'],
+      '楽曲': ['ー'],
+      '先行予約': ['ー'],
+      'ゲスト': ['ー'],
+      'ラジオショッピング': ['ー'],
+      'はぴねすくらぶ': ['ー'],
+      'ヨコアリくん': ['ー'],
+      '放送後': ['ー']
+    };
+  }
+  
   const structure = {
     '日付': [date],
     '7:28パブ告知': [],
@@ -2976,8 +3508,9 @@ function structureChoudo(content, date, remarksData, musicDatabase, startDate, c
       structure['楽曲'].push(item);
     } else if (item.includes('７：２８') || item.includes('7:28')) {
       structure['7:28パブ告知'].push(item);
-    } else if (item.includes('YOKOHAMA PORTSIDE')) {
+    } else if (item.includes('YOKOHAMA PORTSIDE') || item.includes('PORTSIDE') || item.toLowerCase().includes('portside') || item.includes('ポートサイド')) {
       structure['YOKOHAMA PORTSIDE INFORMATION'].push(item);
+      console.log(`  → YOKOHAMA PORTSIDE INFORMATIONとして分類: "${item}"`);
     } else if (item.includes('先行予約')) {
       // 番組表からの先行予約情報を一時配列に追加
       allAdvanceBookings.push(item);
@@ -2998,7 +3531,8 @@ function structureChoudo(content, date, remarksData, musicDatabase, startDate, c
       if (calendarPortsideInfo.length > 0) {
         console.log(`カレンダーからPORTSIDE情報を取得: ${calendarPortsideInfo.length}件`);
         calendarPortsideInfo.forEach(info => {
-          structure['YOKOHAMA PORTSIDE INFORMATION'].push(`YOKOHAMA PORTSIDE INFORMATION [${info}]`);
+          const infoText = typeof info === 'string' ? info : info.toString();
+          structure['YOKOHAMA PORTSIDE INFORMATION'].push(infoText);
         });
       }
     }
@@ -3043,10 +3577,19 @@ function structureChoudo(content, date, remarksData, musicDatabase, startDate, c
     structure['ヨコアリくん'] = ['ー'];
   }
   
-  // 空の項目を「ー」で埋める（ヨコアリくんと放送後は除く）
+  // 空の項目を「ー」で埋める（詳細ログ付き）
+  console.log(`=== ${date} の空フィールド処理開始 ===`);
   Object.keys(structure).forEach(key => {
-    if (key !== '日付' && key !== 'ヨコアリくん' && key !== '放送後' && key !== '先行予約' && structure[key].length === 0) {
+    if (key !== '日付' && key !== 'ヨコアリくん' && key !== '放送後' && key !== '先行予約' && key !== 'YOKOHAMA PORTSIDE INFORMATION' && structure[key].length === 0) {
       structure[key] = ['ー'];
+      console.log(`${key}: 空のため「ー」で設定`);
+    } else if (structure[key].length === 0) {
+      console.log(`${key}: 空だが除外対象のため「ー」設定しない`);
+    } else {
+      console.log(`${key}: ${structure[key].length}件のデータが存在`);
+      if (key === 'YOKOHAMA PORTSIDE INFORMATION') {
+        console.log(`  PORTSIDE詳細: ${JSON.stringify(structure[key])}`);
+      }
     }
   });
   
@@ -3057,6 +3600,17 @@ function structureChoudo(content, date, remarksData, musicDatabase, startDate, c
     console.log(`${date}: 先行予約情報を結合: "${combinedText}"`);
   } else {
     structure['先行予約'] = ['ー'];
+  }
+  
+  // 【DEBUG】PORTSIDE情報の最終確認
+  console.log(`=== ${date} PORTSIDE詳細デバッグ ===`);
+  console.log(`PORTSIDE配列の長さ: ${structure['YOKOHAMA PORTSIDE INFORMATION'].length}`);
+  if (structure['YOKOHAMA PORTSIDE INFORMATION'].length > 0) {
+    structure['YOKOHAMA PORTSIDE INFORMATION'].forEach((item, index) => {
+      console.log(`  PORTSIDE[${index}]: "${item}" (type: ${typeof item})`);
+    });
+  } else {
+    console.log(`  PORTSIDE配列は空です`);
   }
   
   return structure;
@@ -3142,7 +3696,7 @@ function getPortsideInformationFromCalendar(startDate) {
         const dayName = dayNames[daysDiff];
         
         if (dayName && portsideInfo[dayName]) {
-          (portsideInfo as any)[dayName].push({ 曲名: eventTitle, URL: '' });
+          (portsideInfo as any)[dayName].push(eventTitle);
           console.log(`${dayName}: ${eventTitle}`);
         }
       }
@@ -3561,6 +4115,13 @@ function splitMusicData(content, musicDatabase) {
   const musicList = [];
   let currentSong = '';
   
+  // contentのnullチェックを追加
+  if (!content || !Array.isArray(content)) {
+    console.warn('splitMusicData: contentがnullまたは配列ではありません');
+    console.log('contentの値:', content);
+    return [{ 曲名: 'ー', URL: '' }];
+  }
+  
   // musicDatabaseがundefinedの場合はデフォルト値を返す
   if (!musicDatabase) {
     console.warn('楽曲データベースが見つかりません');
@@ -3675,6 +4236,24 @@ function cleanMusicText(text) {
  * PRIME TIMEの構造化（楽曲データ修正版）
  */
 function structurePrimeTime(content, date, musicDatabase) {
+  // nullチェックでエラーを防止
+  if (!content || !Array.isArray(content)) {
+    console.warn('structurePrimeTime: contentがnullまたは配列ではありません');
+    console.log('contentの値:', content);
+    return {
+      '日付': [date],
+      '19:41Traffic': ['ー'],
+      '19:43': ['ー'],
+      '20:51': ['ー'],
+      '営業コーナー': ['ー'],
+      '楽曲': ['ー'],
+      'ゲスト': ['ー'],
+      '時間指定なしパブ': ['ー'],
+      'ラジショピ': ['ー'],
+      '先行予約・限定予約': ['ー']
+    };
+  }
+  
   const structure = {
     '日付': [date],
     '19:41Traffic': [],
@@ -3733,6 +4312,24 @@ function structurePrimeTime(content, date, musicDatabase) {
  * FLAGの構造化
  */
 function structureFlag(content, date, musicDatabase) {
+  // nullチェックでエラーを防止
+  if (!content || !Array.isArray(content)) {
+    console.warn('structureFlag: contentがnullまたは配列ではありません');
+    console.log('contentの値:', content);
+    return {
+      '日付': [date],
+      '12:40 電話パブ': ['ー'],
+      '13:29 パブリシティ': ['ー'],
+      '13:40 パブリシティ': ['ー'],
+      '12:15 リポート案件': ['ー'],
+      '14:29 リポート案件': ['ー'],
+      '時間指定なし告知': ['ー'],
+      '楽曲': ['ー'],
+      '先行予約': ['ー'],
+      'ゲスト': ['ー']
+    };
+  }
+  
   const structure = {
     '日付': [date],
     '12:40 電話パブ': [],
@@ -3789,6 +4386,18 @@ function structureFlag(content, date, musicDatabase) {
  * God Bless Saturdayの構造化
  */
 function structureGodBless(content, date, musicDatabase) {
+  // nullチェックでエラーを防止
+  if (!content || !Array.isArray(content)) {
+    console.warn('structureGodBless: contentがnullまたは配列ではありません');
+    console.log('contentの値:', content);
+    return {
+      '日付': [date],
+      '楽曲': ['ー'],
+      '14:41パブ': ['ー'],
+      '時間指定なしパブ': ['ー']
+    };
+  }
+  
   const structure = {
     '日付': [date],
     '楽曲': [],
@@ -3827,6 +4436,19 @@ function structureGodBless(content, date, musicDatabase) {
  * Route 847の構造化
  */
 function structureRoute847(content, date, musicDatabase) {
+  // nullチェックでエラーを防止
+  if (!content || !Array.isArray(content)) {
+    console.warn('structureRoute847: contentがnullまたは配列ではありません');
+    console.log('contentの値:', content);
+    return {
+      '日付': [date],
+      'リポート 16:47': ['ー'],
+      '営業パブ 17:41': ['ー'],
+      '時間指定なし告知': ['ー'],
+      '楽曲': ['ー']
+    };
+  }
+  
   const structure = {
     '日付': [date],
     'リポート 16:47': [],
@@ -6354,29 +6976,67 @@ function displayEpisodeDetailsTable(program: ProgramDataJSON['programs'][0]): vo
  * 番組構造に変換
  */
 function transformToProgramStructure(allResults: any): ProgramDataJSON['programs'] {
+  console.log('transformToProgramStructure: データ変換開始');
+  console.log('入力データ構造:', JSON.stringify(allResults, null, 2));
+  
   const programsMap: { [key: string]: { episodes: any[], recordings: any[] } } = {};
   
   Object.keys(allResults).forEach(weekKey => {
+    console.log(`処理中の週: ${weekKey}`);
     const weekData = allResults[weekKey];
-    if (!weekData || typeof weekData !== 'object') return;
     
-    Object.keys(weekData).forEach(dayKey => {
-      if (dayKey === 'period') return;
+    if (!weekData || typeof weekData !== 'object') {
+      console.log(`週データが無効: ${weekKey}`);
+      return;
+    }
+    
+    // 【修正】番組キー（'ちょうどいいラジオ'、'PRIME TIME'など）をループ
+    Object.keys(weekData).forEach(programKey => {
+      if (programKey === 'period') return;
       
-      const dayData = weekData[dayKey];
-      if (!dayData || typeof dayData !== 'object') return;
+      console.log(`処理中の番組: ${programKey}`);
+      const programData = weekData[programKey];
       
-      Object.keys(dayData).forEach(programKey => {
-        if (!programsMap[programKey]) {
-          programsMap[programKey] = {
-            episodes: [],
-            recordings: []
-          };
+      if (!programData || typeof programData !== 'object') {
+        console.log(`番組データが無効: ${programKey}`);
+        return;
+      }
+      
+      // programsMapに番組を初期化
+      if (!programsMap[programKey]) {
+        programsMap[programKey] = {
+          episodes: [],
+          recordings: []
+        };
+      }
+      
+      // 【修正】収録予定を分離して処理
+      if (programData.recordings && typeof programData.recordings === 'object') {
+        console.log(`${programKey}の収録予定を処理中`);
+        // recordings オブジェクトを配列形式に変換
+        const recordingsList = Object.keys(programData.recordings).map(recordingName => ({
+          name: recordingName,
+          schedule: programData.recordings[recordingName]
+        }));
+        programsMap[programKey].recordings = recordingsList;
+      }
+      
+      // 【修正】曜日データ（'monday', 'tuesday'など）をループ
+      Object.keys(programData).forEach(dayKey => {
+        if (dayKey === 'recordings') return; // 既に処理済み
+        
+        // 曜日名の検証
+        const validDays = ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'];
+        if (!validDays.includes(dayKey)) {
+          console.log(`無効な曜日キー: ${dayKey} (番組: ${programKey})`);
+          return;
         }
         
-        const programData = dayData[programKey];
-        if (programData && typeof programData === 'object') {
-          const episode = convertToEpisodeFormat(programData, dayKey, weekKey);
+        console.log(`処理中の曜日: ${dayKey} (番組: ${programKey})`);
+        const dayData = programData[dayKey];
+        
+        if (dayData && typeof dayData === 'object') {
+          const episode = convertToEpisodeFormat(dayData, dayKey, weekKey);
           if (episode) {
             programsMap[programKey].episodes.push(episode);
           }
@@ -6385,6 +7045,8 @@ function transformToProgramStructure(allResults: any): ProgramDataJSON['programs
     });
   });
   
+  console.log('処理された番組一覧:', Object.keys(programsMap));
+  
   // 各番組のエピソードを日付順にソート
   Object.keys(programsMap).forEach(programKey => {
     programsMap[programKey].episodes.sort((a: any, b: any) => {
@@ -6392,6 +7054,7 @@ function transformToProgramStructure(allResults: any): ProgramDataJSON['programs
       const dateB = new Date(b.date);
       return dateA.getTime() - dateB.getTime();
     });
+    console.log(`${programKey}: ${programsMap[programKey].episodes.length}エピソード, ${programsMap[programKey].recordings.length}録音予定`);
   });
   
   // 番組の順序を定義
@@ -6433,6 +7096,7 @@ function transformToProgramStructure(allResults: any): ProgramDataJSON['programs
     });
   });
   
+  console.log(`最終的な番組配列:`, programsArray.map(p => `${p.name}(${p.episodes.length}エピソード)`));
   return programsArray;
 }
 
@@ -6441,6 +7105,21 @@ function transformToProgramStructure(allResults: any): ProgramDataJSON['programs
  */
 function convertToEpisodeFormat(programData: any, dayKey: string, weekKey: string): any {
   const dateInfo = calculateDateFromKeys(dayKey, weekKey);
+  
+  console.log(`convertToEpisodeFormat: ${dayKey} (${weekKey}) のエピソード変換開始`);
+  
+  // 【DEBUG】PORTSIDE情報の変換前ログ
+  console.log(`変換前のprogramData構造 (${dayKey}):`, Object.keys(programData));
+  if (programData['YOKOHAMA PORTSIDE INFORMATION']) {
+    console.log(`変換前PORTSIDE情報: ${JSON.stringify(programData['YOKOHAMA PORTSIDE INFORMATION'])}`);
+  } else {
+    console.log(`変換前にPORTSIDE情報が見つかりません`);
+  }
+  
+  // 【DEBUG】PORTSIDE情報抽出結果の詳細ログ
+  const portsideResult = extractYokohamaPortside(programData);
+  console.log(`extractYokohamaPortside結果 (${dayKey}): ${JSON.stringify(portsideResult)}`);
+  console.log(`PORTSIDE結果の型: ${typeof portsideResult}, 配列か: ${Array.isArray(portsideResult)}, 長さ: ${portsideResult.length}`);
   
   return {
     date: dateInfo.date,
@@ -6452,7 +7131,7 @@ function convertToEpisodeFormat(programData: any, dayKey: string, weekKey: strin
     announcements: extractAnnouncements(programData),
     shopping: extractShopping(programData),
     happinessClub: extractHappinessClub(programData),
-    yokohamaPortside: extractYokohamaPortside(programData),
+    yokohamaPortside: portsideResult,
     specialSlots: extractSpecialSlots(programData),
     reportSlots: extractReportSlots(programData),
     others: extractOthers(programData)
@@ -6678,16 +7357,106 @@ function extractHappinessClub(programData: any): string[] {
 }
 
 /**
+ * YOKOHAMA PORTSIDE INFORMATION フルデータフロー診断テスト
+ */
+function testPORTSIDEFullDataFlow() {
+  console.log('=== YOKOHAMA PORTSIDE INFORMATION フルデータフロー診断 ===');
+  
+  try {
+    const config = getConfig();
+    const spreadsheet = SpreadsheetApp.openById(config.SPREADSHEET_ID);
+    const thisWeekSheet = getSheetByWeek(spreadsheet, 0);
+    
+    if (!thisWeekSheet) {
+      console.log('今週のシートが見つかりません');
+      return;
+    }
+
+    console.log(`使用シート: ${thisWeekSheet.getName()}`);
+    
+    // ========== ステップ1: 生データ抽出 ==========
+    console.log('\n【ステップ1】生データ抽出 (extractStructuredWeekData)');
+    const rawWeekData = extractStructuredWeekData(thisWeekSheet);
+    
+    if (!rawWeekData || !rawWeekData['ちょうどいいラジオ']) {
+      console.log('ERROR: ちょうどいいラジオデータが見つかりません');
+      return;
+    }
+    
+    // 月曜日のPORTSIDE情報をチェック
+    const mondayData = rawWeekData['ちょうどいいラジオ']['monday'];
+    if (mondayData && mondayData['YOKOHAMA PORTSIDE INFORMATION']) {
+      console.log(`月曜日のPORTSIDE情報: ${JSON.stringify(mondayData['YOKOHAMA PORTSIDE INFORMATION'])}`);
+    } else {
+      console.log('月曜日のPORTSIDE情報なし');
+    }
+    
+    // ========== ステップ2: JSON変換 ==========
+    console.log('\n【ステップ2】JSON変換 (formatProgramDataAsJSON)');
+    const jsonData = formatProgramDataAsJSON({ '今週': rawWeekData });
+    
+    if (!jsonData?.programs) {
+      console.log('ERROR: JSON変換に失敗');
+      return;
+    }
+    
+    // ちょうどいいラジオの番組を検索
+    const choudoiiProgram = jsonData.programs.find((p: any) => p.name === 'ちょうどいいラジオ');
+    if (!choudoiiProgram) {
+      console.log('ERROR: ちょうどいいラジオが見つかりません');
+      return;
+    }
+    
+    console.log(`ちょうどいいラジオのエピソード数: ${choudoiiProgram.episodes.length}`);
+    
+    // 月曜日のエピソードを検索
+    const mondayEpisode = choudoiiProgram.episodes.find((e: any) => e.weekday === 'monday');
+    if (mondayEpisode) {
+      console.log(`月曜日エピソードのPORTSIDE情報: ${JSON.stringify(mondayEpisode.yokohamaPortside)}`);
+      
+      // ========== ステップ3: エピソード構造テスト ==========
+      console.log('\n【ステップ3】エピソード構造テスト');
+      console.log(`mondayEpisode keys: ${Object.keys(mondayEpisode)}`);
+      console.log(`yokohamaPortside直接アクセス: ${JSON.stringify(mondayEpisode.yokohamaPortside)}`);
+      
+      // その他のフィールドもチェック
+      if (mondayEpisode.announcements) {
+        console.log(`announcements: ${JSON.stringify(mondayEpisode.announcements)}`);
+      }
+      if (mondayEpisode.timeFreePublicity) {
+        console.log(`timeFreePublicity: ${JSON.stringify(mondayEpisode.timeFreePublicity)}`);
+      }
+      
+    } else {
+      console.log('ERROR: 月曜日のエピソードが見つかりません');
+    }
+    
+  } catch (error: unknown) {
+    console.error('テストエラー:', error);
+  }
+}
+
+/**
  * ヨコハマポートサイド情報を抽出
  */
 function extractYokohamaPortside(programData: any): any[] {
+  console.log(`extractYokohamaPortside: 開始 - programData keys: ${Object.keys(programData)}`);
+  
   // 日本語フィールド名「YOKOHAMA PORTSIDE INFORMATION」を確認
   const portsideData = programData['YOKOHAMA PORTSIDE INFORMATION'] || programData.yokohamaPortside;
   
+  console.log(`extractYokohamaPortside: 生データ: ${JSON.stringify(portsideData)}`);
+  console.log(`extractYokohamaPortside: データ型: ${typeof portsideData}, 配列か: ${Array.isArray(portsideData)}`);
+  
   if (portsideData && Array.isArray(portsideData)) {
-    return portsideData.filter((item: any) => item && item !== 'ー');
+    const filtered = portsideData.filter((item: any) => item && item !== 'ー');
+    console.log(`extractYokohamaPortside: フィルタ前: ${portsideData.length}件, フィルタ後: ${filtered.length}件`);
+    console.log(`extractYokohamaPortside: フィルタ結果: ${JSON.stringify(filtered)}`);
+    return filtered;
+  } else {
+    console.log(`extractYokohamaPortside: 配列でないか空のため空配列を返します`);
+    return [];
   }
-  return [];
 }
 
 /**
@@ -7859,6 +8628,841 @@ function testRawProgramDataUnfiltered() {
     return {
       success: false,
       error: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+
+/**
+ * 番組別詳細データを転置テーブル形式で生成する関数
+ */
+/**
+ * 週タイプを番号に変換するヘルパー関数
+ */
+function mapWeekTypeToNumber(weekType: string): number {
+  const weekMapping = {
+    'thisWeek': 1,     // 今週
+    'nextWeek': 2,     // 来週  
+    'nextWeek2': 3,    // 来週の次
+    'nextWeek3': 4     // 来週の次の次
+  };
+  
+  return weekMapping[weekType] || 1; // デフォルトは今週
+}
+
+function generateTransposedProgramTable(programName: string, weekType: string = 'thisWeek'): {success: boolean, data?: any, error?: string, debugLogs?: string[]} {
+  const debugLogs: string[] = [];
+  
+  const log = (message: string) => {
+    console.log(message);
+    debugLogs.push(message);
+  };
+  
+  // 番組名のバリデーション
+  log(`[DEBUG] バリデーション開始: programName="${programName}", type=${typeof programName}`);
+  
+  if (!programName || programName === 'undefined' || programName === null || 
+      (typeof programName === 'string' && programName.trim() === '')) {
+    const errorMessage = '番組名が指定されていません';
+    log(`[ERROR] ${errorMessage}: received "${programName}" (type: ${typeof programName})`);
+    return {success: false, error: errorMessage, debugLogs};
+  }
+  
+  log(`[DEBUG] バリデーション通過: programName="${programName}"`);
+  
+  log(`[DEBUG] 転置テーブル生成開始: ${programName}, 週タイプ: ${weekType}`);
+  
+  try {
+    // 週タイプを番号に変換
+    const weekNumber = mapWeekTypeToNumber(weekType);
+    log(`[DEBUG] 週番号: ${weekNumber} (${weekType})`);
+    
+    // 指定された週データを取得
+    log(`[DEBUG] extractWeekByNumber(${weekNumber})を呼び出し中...`);
+    const weekResults = extractWeekByNumber(weekNumber);
+    log(`[DEBUG] extractWeekByNumberの結果: ${typeof weekResults}, キー数: ${Object.keys(weekResults).length}`);
+    log(`[DEBUG] 取得されたキー: [${Object.keys(weekResults).join(', ')}]`);
+    
+    if (!weekResults || Object.keys(weekResults).length === 0) {
+      log('[ERROR] 週データが見つかりません');
+      log(`[ERROR] weekResultsの値: ${JSON.stringify(weekResults)}`);
+      return {success: false, error: 'データが見つかりません', debugLogs};
+    }
+
+    // シート名（週データのキー）を取得
+    const sheetName = Object.keys(weekResults)[0];
+    log(`[DEBUG] 選択されたシート名: "${sheetName}"`);
+    const weekData = weekResults[sheetName];
+    log(`[DEBUG] 週データのタイプ: ${typeof weekData}`);
+    log(`[DEBUG] 週データの番組数: ${weekData ? Object.keys(weekData).length : 0}`);
+    log(`[DEBUG] 利用可能な番組名: [${weekData ? Object.keys(weekData).join(', ') : []}]`);
+    log(`[DEBUG] リクエストされた番組名: "${programName}"`);
+    log(`[DEBUG] 番組名の完全一致チェック: ${weekData && weekData[programName] ? 'OK' : 'NG'}`);
+    
+    if (!weekData || !weekData[programName]) {
+      log(`[ERROR] ${programName}の番組データが見つかりません`);
+      
+      // 部分マッチングを試行
+      log(`[DEBUG] 部分マッチングを試行...`);
+      let matchedProgram = null;
+      if (weekData) {
+        for (const availableProgram of Object.keys(weekData)) {
+          log(`[DEBUG] チェック: "${availableProgram}" vs "${programName}"`);
+          // 安全な文字列比較を実行
+          if (availableProgram && programName && 
+              typeof availableProgram === 'string' && typeof programName === 'string' &&
+              (availableProgram.includes(programName) || programName.includes(availableProgram))) {
+            log(`[DEBUG] 部分マッチした番組を発見: "${availableProgram}"`);
+            matchedProgram = availableProgram;
+            break;
+          }
+        }
+      }
+      
+      if (!matchedProgram) {
+        log('[ERROR] 部分マッチも失敗');
+        return {success: false, error: `該当する番組データがありません: "${programName}"`, debugLogs};
+      }
+      
+      // マッチした番組を使用
+      log(`[DEBUG] マッチした番組を使用: "${matchedProgram}"`);
+      programName = matchedProgram;
+    }
+
+    // 番組データを抽出
+    log(`[DEBUG] 番組データを抽出中: ${programName}`);
+    const programData = extractProgramData(weekData[programName], programName);
+    if (!programData || Object.keys(programData).length === 0) {
+      log(`[ERROR] ${programName}の曜日別データが見つかりません`);
+      log(`[DEBUG] 利用可能な曜日: [${Object.keys(weekData[programName] || {}).join(', ')}]`);
+      return {success: false, error: '該当する番組の曜日データがありません', debugLogs};
+    }
+
+    log(`[DEBUG] 抽出された曜日数: ${Object.keys(programData).length}`);
+    log(`[DEBUG] 抽出された曜日: [${Object.keys(programData).join(', ')}]`);
+
+    // 転置テーブル用データ構造を生成
+    log(`[DEBUG] 転置テーブルデータ構造を生成中...`);
+    log(`[DEBUG] programData構造確認: type=${typeof programData}, keys=[${Object.keys(programData || {}).join(', ')}], keyCount=${Object.keys(programData || {}).length}`);
+    
+    const transposedData = generateTransposedTableData(programData, programName);
+    
+    // 戻り値の詳細検証
+    log(`[DEBUG] generateTransposedTableData戻り値検証: type=${typeof transposedData}, isNull=${transposedData === null}, isUndefined=${transposedData === undefined}, keys=[${transposedData ? Object.keys(transposedData).join(', ') : 'none'}]`);
+    
+    if (transposedData) {
+      log(`[DEBUG] 転置テーブル生成完了: ${programName}`);
+      log(`[DEBUG] 転置テーブルデータ内容: programName=${transposedData.programName}, headerCount=${transposedData.headers ? transposedData.headers.length : 0}, rowCount=${transposedData.rows ? transposedData.rows.length : 0}`);
+    } else {
+      log(`[ERROR] 転置テーブルデータがnullまたはundefinedです`);
+      return {success: false, error: '転置テーブルデータの生成に失敗しました', debugLogs};
+    }
+    
+    return {success: true, data: transposedData, debugLogs};
+    
+  } catch (error: unknown) {
+    log(`[ERROR] 転置テーブル生成エラー: ${error instanceof Error ? error.message : String(error)}`);
+    if (error instanceof Error && error.stack) {
+      log(`[DEBUG] スタックトレース: ${error.stack}`);
+    }
+    return {success: false, error: `エラーが発生しました: ${error instanceof Error ? error.message : String(error)}`, debugLogs};
+  }
+}
+
+/**
+ * 日付文字列と曜日を組み合わせたヘッダー形式にフォーマットする関数
+ */
+function formatDateWithDay(dateStr: string, dayName: string): string {
+  try {
+    console.log(`[DEBUG] 日付フォーマット開始: "${dateStr}" + "${dayName}"`);
+    const date = new Date(dateStr);
+    
+    // 日付の妥当性チェック
+    if (isNaN(date.getTime())) {
+      console.warn(`[WARN] 無効な日付文字列: "${dateStr}"`);
+      return dayName; // エラー時は曜日のみ
+    }
+    
+    const month = date.getMonth() + 1;
+    const day = date.getDate();
+    const formatted = `${month}/${day}${dayName}`;
+    
+    console.log(`[DEBUG] 日付フォーマット結果: "${formatted}"`);
+    return formatted;
+  } catch (error) {
+    console.error('[ERROR] 日付フォーマットエラー:', error);
+    return dayName; // エラー時は曜日のみ
+  }
+}
+
+/**
+ * 転置テーブル用のデータ構造を生成する関数
+ */
+function generateTransposedTableData(programData: any, programName: string): any {
+  try {
+    console.log(`[DEBUG] generateTransposedTableData開始: programName="${programName}"`);
+    console.log(`[DEBUG] programDataの構造:`, {
+      type: typeof programData,
+      keys: programData ? Object.keys(programData) : [],
+      isNull: programData === null,
+      isUndefined: programData === undefined
+    });
+
+    // データ構造の基本検証
+    if (!programData || typeof programData !== 'object') {
+      console.error('[ERROR] programDataが無効です:', programData);
+      return null;
+    }
+
+    // 改善点.txtの要件に基づく番組別項目定義
+    const programItems = getProgramItems(programName);
+    console.log(`[DEBUG] 番組項目数: ${programItems ? programItems.length : 0}`);
+    
+    // 日付を取得（日本語の曜日キーを使用）
+    console.log(`[DEBUG] programDataキー確認:`, Object.keys(programData));
+    
+    const dayOrder = ['月曜', '火曜', '水曜', '木曜', '金曜', '土曜', '日曜'];
+    const availableDays = dayOrder.filter(day => programData[day]);
+    
+    console.log(`[DEBUG] dayOrderでのフィルタ結果: [${availableDays.join(', ')}]`);
+    
+    console.log(`[DEBUG] 利用可能曜日: [${availableDays.join(', ')}]`);
+    
+    if (availableDays.length === 0) {
+      console.warn('[WARN] 利用可能な曜日データがありません');
+      return null;
+    }
+
+    // ヘッダー行（項目 + 日付列）
+    const headers = ['項目'];
+    availableDays.forEach((dayKey, index) => {
+      const dayData = programData[dayKey];
+      const japaneseDay = dayKey; // 既に日本語なのでそのまま使用
+      
+      console.log(`[DEBUG] ${dayKey}(${japaneseDay})のデータ検証: exists=${!!dayData}, type=${typeof dayData}, keys=[${dayData ? Object.keys(dayData).join(', ') : 'none'}]`);
+      console.log(`[DEBUG] ${dayKey}の日付関連: hasDate=${dayData?.['日付'] ? true : false}, dateType=${typeof dayData?.['日付']}, isArray=${Array.isArray(dayData?.['日付'])}, dateLength=${Array.isArray(dayData?.['日付']) ? dayData['日付'].length : 'N/A'}`);
+      
+      // dayData全体の内容を詳細表示
+      if (dayData) {
+        console.log(`[DEBUG] ${dayKey}の完全なデータ内容:`, JSON.stringify(dayData, null, 2));
+      }
+
+      // 安全な日付データアクセス
+      console.log(`[DEBUG] ${dayKey}の条件チェック: dayData=${!!dayData}, hasDateField=${!!dayData?.['日付']}, isDateArray=${Array.isArray(dayData?.['日付'])}, dateArrayLength=${Array.isArray(dayData?.['日付']) ? dayData['日付'].length : 'N/A'}`);
+      
+      if (dayData && dayData['日付'] && Array.isArray(dayData['日付']) && dayData['日付'].length > 0) {
+        const dateStr = dayData['日付'][0];
+        console.log(`[DEBUG] ${dayKey}の日付文字列取得成功: "${dateStr}"`);
+        const formattedHeader = formatDateWithDay(dateStr, japaneseDay);
+        console.log(`[DEBUG] ${dayKey}のフォーマット済みヘッダー: "${formattedHeader}"`);
+        headers.push(formattedHeader); // "8/26月曜"形式
+      } else {
+        console.log(`[DEBUG] ${dayKey}の日付データが条件を満たさない - 理由: dayData=${!!dayData}, dateField=${!!dayData?.['日付']}, isArray=${Array.isArray(dayData?.['日付'])}, length=${Array.isArray(dayData?.['日付']) ? dayData['日付'].length : 'N/A'}`);
+        headers.push(japaneseDay);
+      }
+    });
+
+    console.log(`[DEBUG] ヘッダー生成完了:`, headers);
+
+    // データ行を生成
+    const rows = [];
+    if (programItems && Array.isArray(programItems)) {
+      programItems.forEach((item, itemIndex) => {
+        console.log(`[DEBUG] 項目 ${itemIndex + 1}/${programItems.length}: "${item}"`);
+        const row = [item]; // 最初の列は項目名
+        
+        // 各日付の値を取得
+        availableDays.forEach(dayName => {
+          try {
+            const dayData = programData[dayName];
+            const value = getEpisodeItemValue(dayData, item);
+            const formattedValue = formatItemValue(value);
+            row.push(formattedValue);
+          } catch (error) {
+            console.error(`[ERROR] ${dayName}の${item}データ取得エラー:`, error);
+            row.push('ー'); // エラー時のデフォルト値
+          }
+        });
+        
+        rows.push(row);
+      });
+    } else {
+      console.error('[ERROR] programItemsが配列ではありません:', programItems);
+    }
+
+    console.log(`[DEBUG] データ行生成完了: ${rows.length}行`);
+
+    const result = {
+      programName: programName,
+      headers: headers,
+      rows: rows
+    };
+
+    console.log(`[DEBUG] generateTransposedTableData正常完了`);
+    return result;
+
+  } catch (error: unknown) {
+    console.error(`[ERROR] generateTransposedTableData内でエラー:`, error);
+    if (error instanceof Error) {
+      console.error(`[ERROR] エラー詳細: ${error.message}`);
+      console.error(`[ERROR] スタックトレース: ${error.stack}`);
+    }
+    
+    // エラー時でも最低限のデータ構造を返す
+    return {
+      programName: programName,
+      headers: ['項目', 'エラー'],
+      rows: [['データ取得エラー', `エラー: ${error instanceof Error ? error.message : String(error)}`]]
+    };
+  }
+}
+
+/**
+ * 番組の曜日別データを転置テーブル用に変換する関数
+ */
+function extractProgramData(programWeekData: any, programName: string): any {
+  const programData: any = {};
+  
+  // 曜日のマッピング
+  const dayMapping = {
+    'monday': '月曜',
+    'tuesday': '火曜', 
+    'wednesday': '水曜',
+    'thursday': '木曜',
+    'friday': '金曜',
+    'saturday': '土曜',
+    'sunday': '日曜'
+  };
+  
+  // 番組の曜日別データを処理
+  for (const [englishDay, japaneseDay] of Object.entries(dayMapping)) {
+    if (programWeekData[englishDay]) {
+      programData[japaneseDay] = {
+        [programName]: programWeekData[englishDay]
+      };
+      console.log(`番組データ抽出: ${japaneseDay} - ${programName}`);
+    }
+  }
+  
+  return programData;
+}
+
+/**
+ * 転置テーブルHTMLを生成する関数
+ */
+function convertToTransposedTable(programData: any, programName: string): string {
+  // 改善点.txtの要件に基づく番組別項目定義
+  const programItems = getProgramItems(programName);
+  
+  // 日付を取得（曜日順にソート）
+  const dayOrder = ['月曜', '火曜', '水曜', '木曜', '金曜', '土曜', '日曜'];
+  const availableDays = dayOrder.filter(day => programData[day]);
+  
+  if (availableDays.length === 0) {
+    return '<div class="no-data">表示可能なデータがありません</div>';
+  }
+
+  // テーブルヘッダー生成
+  let html = '<table class="transposed-table">\n';
+  html += '  <thead>\n';
+  html += '    <tr>\n';
+  html += '      <th class="item-header">項目</th>\n';
+  
+  // 各日付をヘッダーに追加
+  availableDays.forEach(dayName => {
+    const dateStr = getDateForDay(dayName);
+    html += `      <th class="date-header">${dateStr}</th>\n`;
+  });
+  
+  html += '    </tr>\n';
+  html += '  </thead>\n';
+  html += '  <tbody>\n';
+
+  // 各項目について行を生成
+  programItems.forEach(item => {
+    html += '    <tr>\n';
+    html += `      <td class="item-name">${item}</td>\n`;
+    
+    // 各日付の値を取得
+    availableDays.forEach(dayName => {
+      const value = getEpisodeItemValue(programData[dayName], item);
+      const formattedValue = formatItemValue(value);
+      html += `      <td class="item-value">${formattedValue}</td>\n`;
+    });
+    
+    html += '    </tr>\n';
+  });
+
+  html += '  </tbody>\n';
+  html += '</table>\n';
+  
+  return html;
+}
+
+/**
+ * 番組別項目を取得する関数（改善点.txtの要件に基づく）
+ */
+function getProgramItems(programName: string): string[] {
+  switch (programName) {
+    case 'ちょうどいいラジオ':
+      return [
+        '７：２８パブ告知',
+        '時間指定なし告知',
+        'YOKOHAMA PORTSIDE INFORMATION',
+        '指定曲',
+        '先行予約',
+        'ゲスト',
+        '６：４５ラジオショッピング',
+        '８：２９はぴねすくらぶ',
+        '収録予定'
+      ];
+    
+    case 'PRIME TIME':
+      return [
+        '１９：４３パブリシティ',
+        '２０：５１パブリシティ',
+        '営業コーナー',
+        '指定曲',
+        'ゲスト',
+        '時間指定なしパブ',
+        'ラジショピ',
+        '先行予約'
+      ];
+    
+    case 'FLAG':
+      return [
+        '１２：４０電話パブ',
+        '１３：２９パブリシティ',
+        '１３：４０パブリシティ',
+        '１２：１５リポート案件',
+        '１４：２９リポート案件',
+        '時間指定なし告知',
+        '楽曲',
+        '先行予約',
+        '収録予定'
+      ];
+    
+    case 'God Bless Saturday':
+      return [
+        'キリンパークシティーヨコハマ',
+        '指定曲',
+        '１４：４１パブ',
+        '時間指定なし告知'
+      ];
+    
+    case 'Route 847':
+      return [
+        '１６：４７パブ',
+        '１７：４１パブ',
+        '時間指定なし告知',
+        '指定曲'
+      ];
+    
+    default:
+      return ['日付', '内容'];
+  }
+}
+
+/**
+ * エピソードデータから項目値を取得する関数
+ */
+function getEpisodeItemValue(dayEpisodes: any, itemName: string): any {
+  if (!dayEpisodes || typeof dayEpisodes !== 'object') {
+    return ['ー'];
+  }
+
+  // 番組データから該当する項目を探す
+  for (const [showName, showData] of Object.entries(dayEpisodes)) {
+    if (showData && typeof showData === 'object') {
+      const data = showData as any;
+      
+      // 項目名のマッピング処理
+      const mappedItem = mapItemName(itemName);
+      
+      if (data[mappedItem]) {
+        return data[mappedItem];
+      }
+      
+      // 部分マッチも試行
+      for (const [key, value] of Object.entries(data)) {
+        if (key.includes(mappedItem) || mappedItem.includes(key)) {
+          return value;
+        }
+      }
+    }
+  }
+  
+  return ['ー'];
+}
+
+/**
+ * 項目名を内部データ構造にマッピングする関数
+ */
+function mapItemName(displayName: string): string {
+  const mappings: { [key: string]: string } = {
+    '７：２８パブ告知': '7:28パブ告知',
+    '時間指定なし告知': '時間指定なし告知',
+    'YOKOHAMA PORTSIDE INFORMATION': 'YOKOHAMA PORTSIDE INFORMATION',
+    '指定曲': '楽曲',
+    '先行予約': '先行予約',
+    'ゲスト': 'ゲスト',
+    '６：４５ラジオショッピング': 'ラジオショッピング',
+    '８：２９はぴねすくらぶ': 'はぴねすくらぶ',
+    '収録予定': '収録予定',
+    '１９：４３パブリシティ': '19:43パブリシティ',
+    '２０：５１パブリシティ': '20:51パブリシティ',
+    '営業コーナー': '営業コーナー',
+    '時間指定なしパブ': '時間指定なしパブ',
+    'ラジショピ': 'ラジオショッピング',
+    '１２：４０電話パブ': '12:40 電話パブ',
+    '１３：２９パブリシティ': '13:29 パブリシティ',
+    '１３：４０パブリシティ': '13:40 パブリシティ',
+    '１２：１５リポート案件': '12:15 リポート案件',
+    '１４：２９リポート案件': '14:29 リポート案件',
+    '楽曲': '楽曲',
+    'キリンパークシティーヨコハマ': 'キリンパークシティーヨコハマ',
+    '１４：４１パブ': '14:41パブ',
+    '１６：４７パブ': 'リポート 16:47',
+    '１７：４１パブ': '営業パブ 17:41'
+  };
+  
+  return mappings[displayName] || displayName;
+}
+
+/**
+ * 項目値をHTML用にフォーマットする関数
+ */
+function formatItemValue(value: any): string {
+  if (!value) {
+    return 'ー';
+  }
+  
+  if (Array.isArray(value)) {
+    if (value.length === 0) {
+      return 'ー';
+    }
+    
+    // 配列の場合は改行区切りで表示
+    return value
+      .filter(item => item && item !== 'ー')
+      .map(item => formatSingleItem(item))
+      .join('<br>') || 'ー';
+  }
+  
+  return formatSingleItem(value);
+}
+
+/**
+ * 単一項目をフォーマットする関数（楽曲オブジェクト対応）
+ */
+function formatSingleItem(item: any): string {
+  if (!item) {
+    return 'ー';
+  }
+  
+  // デバッグ: オブジェクトの詳細構造を確認
+  if (typeof item === 'object' && item !== null) {
+    console.log(`[DEBUG] formatSingleItem: オブジェクト検出`);
+    console.log(`[DEBUG] typeof: ${typeof item}`);
+    console.log(`[DEBUG] keys:`, Object.keys(item));
+    console.log(`[DEBUG] values:`, Object.values(item));
+    console.log(`[DEBUG] 全体:`, JSON.stringify(item, null, 2));
+    
+    // 様々なパターンの楽曲オブジェクトプロパティを確認
+    const possibleSongKeys = ['曲名', 'title', 'songName', 'name', '楽曲名', 'song'];
+    const possibleArtistKeys = ['アーティスト', 'artist', 'singer', '歌手'];
+    const possibleUrlKeys = ['URL', 'url', 'link', 'href'];
+    
+    let songName = null;
+    let artistName = null;
+    let songUrl = null;
+    
+    // 楽曲名を検索
+    for (const key of possibleSongKeys) {
+      if (item[key] !== undefined && item[key] !== null && item[key] !== 'ー' && item[key] !== '') {
+        songName = item[key];
+        console.log(`[DEBUG] 楽曲名発見: "${key}" = "${songName}"`);
+        break;
+      }
+    }
+    
+    // アーティスト名を検索
+    for (const key of possibleArtistKeys) {
+      if (item[key] !== undefined && item[key] !== null && item[key] !== 'ー' && item[key] !== '') {
+        artistName = item[key];
+        console.log(`[DEBUG] アーティスト名発見: "${key}" = "${artistName}"`);
+        break;
+      }
+    }
+    
+    // URL を検索
+    for (const key of possibleUrlKeys) {
+      if (item[key] !== undefined && item[key] !== null && item[key] !== 'ー' && item[key] !== '') {
+        songUrl = item[key];
+        console.log(`[DEBUG] URL発見: "${key}" = "${songUrl}"`);
+        break;
+      }
+    }
+    
+    // 楽曲情報が見つかった場合
+    if (songName) {
+      const songInfo = [];
+      songInfo.push(songName);
+      
+      if (artistName) {
+        songInfo.push(`/ ${artistName}`);
+      }
+      
+      if (songUrl) {
+        songInfo.push(`<a href="${songUrl}" target="_blank">[URL]</a>`);
+      }
+      
+      const result = songInfo.join(' ');
+      console.log(`[DEBUG] 楽曲フォーマット結果: "${result}"`);
+      return result;
+    }
+    
+    // 楽曲オブジェクトでない場合はJSONで表示
+    try {
+      const jsonStr = JSON.stringify(item);
+      console.log(`[DEBUG] JSON化結果: "${jsonStr}"`);
+      return jsonStr;
+    } catch (e) {
+      console.log(`[DEBUG] JSON化失敗, String()使用`);
+      return String(item);
+    }
+  }
+  
+  const result = String(item).trim() || 'ー';
+  console.log(`[DEBUG] 非オブジェクト値: "${result}"`);
+  return result;
+}
+
+/**
+ * 曜日名から日付を取得する関数 (転置テーブル用)
+ */
+function getDateForDay(dayName: string): string {
+  try {
+    // 直接シートアクセス方式で安全に日付を取得
+    const config = getConfig();
+    const spreadsheet = SpreadsheetApp.openById(config.SPREADSHEET_ID);
+    const allSheets = spreadsheet.getSheets();
+    
+    // 週形式のシートを探して最新のシートを使用
+    let targetSheet: string = '';
+    const weekSheets: string[] = [];
+    
+    allSheets.forEach(sheet => {
+      const sheetName = sheet.getName();
+      if (sheetName.match(/^\d{2}\.\d{1,2}\.\d{2}-/)) {
+        weekSheets.push(sheetName);
+      }
+    });
+    
+    if (weekSheets.length > 0) {
+      // 日付でソートして最新のシートを使用
+      weekSheets.sort((a, b) => {
+        try {
+          const startA = getStartDateFromSheetName(a);
+          const startB = getStartDateFromSheetName(b);
+          return startB.getTime() - startA.getTime(); // 降順（最新が先頭）
+        } catch {
+          return 0;
+        }
+      });
+      targetSheet = weekSheets[0];
+      
+      // シート名から日付を算出
+      try {
+        const dayDates = calculateDayDates(targetSheet);
+        
+        // 曜日名から英語名に変換
+        const dayMapping: { [key: string]: string } = {
+          '月曜': 'monday',
+          '火曜': 'tuesday',
+          '水曜': 'wednesday', 
+          '木曜': 'thursday',
+          '金曜': 'friday',
+          '土曜': 'saturday',
+          '日曜': 'sunday'
+        };
+        
+        const englishDay = dayMapping[dayName];
+        if (englishDay && dayDates[englishDay]) {
+          return dayDates[englishDay];
+        }
+      } catch (dateError) {
+        console.error('日付算出エラー:', dateError);
+      }
+    } else {
+      console.warn('週形式のシートが見つかりません');
+    }
+    
+    // フォールバック: 曜日名のまま返す
+    return dayName;
+    
+  } catch (error) {
+    console.error('日付取得エラー:', error);
+    return dayName;
+  }
+}
+
+/**
+ * 転置テーブル表示経路の完全デバッグ用テスト関数
+ */
+function testTransposedTableDataFlow(programName = 'ちょうどいいラジオ') {
+  console.log(`=== 転置テーブルデータフロー完全テスト開始 ===`);
+  console.log(`[DEBUG] 受信したprogramName: "${programName}" (type: ${typeof programName})`);
+  
+  // programNameが未定義の場合は明示的にデフォルト値をセット
+  if (!programName || programName === 'undefined' || typeof programName !== 'string') {
+    programName = 'ちょうどいいラジオ';
+    console.log(`[DEBUG] programNameをデフォルト値に修正: "${programName}"`);
+  }
+  
+  console.log(`テスト対象番組: ${programName}`);
+  
+  try {
+    // 1. CONFIG確認
+    console.log('\n【ステップ1】CONFIG確認');
+    const config = getConfig();
+    console.log('SPREADSHEET_ID:', config.SPREADSHEET_ID);
+    
+    // 2. スプレッドシート接続確認
+    console.log('\n【ステップ2】スプレッドシート接続確認');
+    const spreadsheet = SpreadsheetApp.openById(config.SPREADSHEET_ID);
+    const allSheets = spreadsheet.getSheets();
+    console.log(`総シート数: ${allSheets.length}`);
+    
+    // 3. 週シート検出
+    console.log('\n【ステップ3】週シート検出');
+    const weekSheets = [];
+    allSheets.forEach((sheet, index) => {
+      const sheetName = sheet.getName();
+      console.log(`シート${index + 1}: "${sheetName}"`);
+      if (sheetName.match(/^\d{2}\.\d{1,2}\.\d{2}-/)) {
+        weekSheets.push(sheetName);
+        console.log(`  → 週シートとして認識`);
+      }
+    });
+    
+    console.log(`検出された週シート数: ${weekSheets.length}`);
+    console.log('週シート一覧:', weekSheets);
+    
+    if (weekSheets.length === 0) {
+      return {
+        success: false,
+        error: '週シートが見つかりません',
+        details: {
+          totalSheets: allSheets.length,
+          allSheetNames: allSheets.map(s => s.getName())
+        }
+      };
+    }
+    
+    // 4. 最新の週シート選択
+    console.log('\n【ステップ4】最新の週シート選択');
+    weekSheets.sort();
+    const targetSheet = weekSheets[0]; // 1番目（最新）
+    console.log(`選択されたシート: "${targetSheet}"`);
+    
+    // 5. シート取得とデータ抽出テスト
+    console.log('\n【ステップ5】シート取得とデータ抽出テスト');
+    const sheet = spreadsheet.getSheetByName(targetSheet);
+    if (!sheet) {
+      return {
+        success: false,
+        error: `シート "${targetSheet}" が取得できません`
+      };
+    }
+    
+    console.log('シート取得成功');
+    const dataRange = sheet.getDataRange();
+    const totalRows = dataRange.getNumRows();
+    const totalCols = dataRange.getNumColumns();
+    console.log(`データ範囲: ${totalRows}行 × ${totalCols}列`);
+    
+    // 6. extractStructuredWeekData呼び出し
+    console.log('\n【ステップ6】extractStructuredWeekData呼び出し');
+    const weekData = extractStructuredWeekData(sheet);
+    console.log('extractStructuredWeekData結果:', typeof weekData);
+    
+    if (!weekData) {
+      return {
+        success: false,
+        error: 'extractStructuredWeekDataがnullを返しました'
+      };
+    }
+    
+    console.log('番組数:', Object.keys(weekData).length);
+    console.log('番組一覧:', Object.keys(weekData));
+    
+    // 7. 指定番組の存在確認
+    console.log('\n【ステップ7】指定番組の存在確認');
+    console.log(`要求番組名: "${programName}"`);
+    console.log(`完全一致: ${weekData[programName] ? 'あり' : 'なし'}`);
+    
+    // 部分マッチング確認
+    const matchingPrograms = [];
+    Object.keys(weekData).forEach(availableProgram => {
+      if (availableProgram.includes(programName) || programName.includes(availableProgram)) {
+        matchingPrograms.push(availableProgram);
+      }
+    });
+    console.log('部分マッチング番組:', matchingPrograms);
+    
+    // 8. 番組データ構造確認
+    if (weekData[programName] || matchingPrograms.length > 0) {
+      const targetProgram = weekData[programName] ? programName : matchingPrograms[0];
+      console.log(`\n【ステップ8】番組データ構造確認: "${targetProgram}"`);
+      const programData = weekData[targetProgram];
+      console.log('曜日数:', Object.keys(programData).length);
+      console.log('利用可能曜日:', Object.keys(programData));
+      
+      // 各曜日のデータサンプル
+      Object.keys(programData).slice(0, 2).forEach(day => {
+        console.log(`${day}のデータキー:`, Object.keys(programData[day]));
+      });
+    }
+    
+    // 9. generateTransposedProgramTable呼び出しテスト
+    console.log('\n【ステップ9】generateTransposedProgramTable呼び出しテスト');
+    const result = generateTransposedProgramTable(programName);
+    console.log('結果タイプ:', typeof result);
+    console.log('success:', result.success);
+    if (!result.success) {
+      console.log('error:', result.error);
+    } else {
+      console.log('data:', result.data ? 'あり' : 'なし');
+      if (result.data) {
+        console.log('headers:', result.data.headers);
+        console.log('rows数:', result.data.rows ? result.data.rows.length : 0);
+      }
+    }
+    if (result.debugLogs) {
+      console.log('debugLogs数:', result.debugLogs.length);
+    }
+    
+    return {
+      success: true,
+      testResults: {
+        totalSheets: allSheets.length,
+        weekSheetsFound: weekSheets.length,
+        targetSheet: targetSheet,
+        programsFound: Object.keys(weekData).length,
+        availablePrograms: Object.keys(weekData),
+        requestedProgram: programName,
+        exactMatch: !!weekData[programName],
+        partialMatches: matchingPrograms,
+        finalResult: result
+      }
+    };
+    
+  } catch (error) {
+    console.error('テスト中にエラー:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined
     };
   }
 }

@@ -967,9 +967,8 @@
         <div class="tab-nav">
             <ul>
                 <li><button class="tab-button active" onclick="switchTab('generate')">ドキュメント生成</button></li>
-                <li><button class="tab-button" onclick="switchTab('metadata')">メタデータ編集</button></li>
-                <li><button class="tab-button" onclick="switchTab('table')">番組一覧表</button></li>
-                <li><button class="tab-button" onclick="switchTab('debug')">データ構造確認</button></li>
+                <li><button class="tab-button" onclick="switchTab('table')">番組別詳細表</button></li>
+                <li><button class="tab-button" onclick="switchTab('dataflow')">データフロー分析</button></li>
             </ul>
         </div>
 
@@ -1052,211 +1051,138 @@
             </div>
         </div>
 
-        <!-- タブ2: メタデータ編集 -->
-        <div id="tab-metadata" class="tab-content">
+
+        <!-- タブ3: データフロー分析 -->
+        <div id="tab-dataflow" class="tab-content">
             <div style="text-align: center; margin-bottom: 30px;">
-                <h3 style="color: #2d3748; margin-bottom: 10px;">📝 メタデータ編集</h3>
-                <p style="color: #718096;">番組のメタデータを編集・管理できます</p>
+                <h3 style="color: #2d3748; margin-bottom: 10px;">🔍 データフロー分析</h3>
+                <p style="color: #718096;">各段階でのJSONデータの変換プロセスを確認できます</p>
             </div>
-            
-            <div class="metadata-controls">
+
+            <div class="data-controls">
                 <div class="control-group">
-                    <label for="metadata-program-select">編集する番組:</label>
-                    <select id="metadata-program-select" class="form-select" onchange="loadProgramMetadata()">
+                    <label for="dataflow-program-select">番組を選択:</label>
+                    <select id="dataflow-program-select" class="form-select">
                         <option value="">番組を選択してください</option>
                         <option value="ちょうどいいラジオ">ちょうどいいラジオ</option>
                         <option value="PRIME TIME">PRIME TIME</option>
                         <option value="FLAG">FLAG</option>
-                        <option value="Route 847">Route 847</option>
                         <option value="God Bless Saturday">God Bless Saturday</option>
+                        <option value="Route 847">Route 847</option>
                     </select>
                 </div>
-                
-                <button class="btn btn-secondary" onclick="createNewProgram()" style="width: auto; margin-left: 10px;">
-                    + 新規番組追加
+                <div class="control-group">
+                    <label for="dataflow-week-select">対象週を選択:</label>
+                    <select id="dataflow-week-select" class="form-select">
+                        <option value="thisWeek">今週</option>
+                        <option value="nextWeek">来週</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label for="dataflow-stage-select">分析段階:</label>
+                    <select id="dataflow-stage-select" class="form-select">
+                        <option value="all">全段階</option>
+                        <option value="1-INPUT-SHEET">1. シート入力</option>
+                        <option value="2-MARKERS-DETECTED">2. マーカー検出</option>
+                        <option value="3-DATE-RANGES">3. 日付範囲計算</option>
+                        <option value="4-STRUCTURED-PROGRAMS">4. 番組構造化</option>
+                        <option value="5-FINAL-WEEK-DATA">5. 週データ最終形</option>
+                        <option value="6-WEBAPP-INPUT">6. WebApp入力</option>
+                        <option value="7-RAW-WEEK-DATA">7. 生週データ</option>
+                        <option value="8-TRANSFORMED-WEEK-DATA">8. データ変換後</option>
+                        <option value="9-WEBAPP-FINAL-OUTPUT">9. WebApp最終出力</option>
+                    </select>
+                </div>
+            </div>
+            
+            <div style="display: flex; gap: 15px; justify-content: center; margin-bottom: 30px;">
+                <button onclick="loadDataFlowAnalysis()" class="btn btn-primary">
+                    データフロー実行・分析
+                </button>
+                <button onclick="clearDataFlowData()" class="btn btn-secondary">
+                    データクリア
+                </button>
+                <button onclick="exportDebugData()" class="btn btn-secondary">
+                    JSONエクスポート
                 </button>
             </div>
 
-            <div id="metadata-editor" class="metadata-editor" style="display: none;">
-                <form id="metadata-form">
-                    <div class="form-section">
-                        <h4>基本情報</h4>
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="program-name">番組名:</label>
-                                <input type="text" id="program-name" class="form-input" required>
-                            </div>
-                            <div class="form-group">
-                                <label for="program-id">番組ID:</label>
-                                <input type="text" id="program-id" class="form-input" required>
-                            </div>
-                        </div>
-                        
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="production-company">制作会社:</label>
-                                <input type="text" id="production-company" class="form-input">
-                            </div>
-                            <div class="form-group">
-                                <label for="genre">ジャンル:</label>
-                                <input type="text" id="genre" class="form-input">
-                            </div>
-                        </div>
-                        
-                        <div class="form-row">
-                            <div class="form-group">
-                                <label for="start-date">開始日:</label>
-                                <input type="date" id="start-date" class="form-input">
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="form-section">
-                        <h4>放送スケジュール</h4>
-                        <div class="form-group">
-                            <label for="regular-slots">レギュラー枠 (カンマ区切り):</label>
-                            <textarea id="regular-slots" class="form-textarea" placeholder="例: Mon–Thu 06:00-09:00, Fri 18:00-20:00"></textarea>
-                        </div>
-                    </div>
-                    
-                    <div class="form-section">
-                        <h4>出演者</h4>
-                        <div class="form-group">
-                            <label for="hosts">ホスト (カンマ区切り):</label>
-                            <textarea id="hosts" class="form-textarea" placeholder="例: 光邦, 石原, 平戸"></textarea>
-                        </div>
-                    </div>
-                    
-                    <div class="form-section">
-                        <h4>フレーム設定</h4>
-                        <div id="frames-container">
-                            <div class="frame-type">
-                                <h5>告知フレーム</h5>
-                                <div id="publicity-frames"></div>
-                                <button type="button" class="btn-add" onclick="addFrame('publicity')">+ 告知フレーム追加</button>
-                            </div>
-                            
-                            <div class="frame-type">
-                                <h5>リポートフレーム</h5>
-                                <div id="report-frames"></div>
-                                <button type="button" class="btn-add" onclick="addFrame('report')">+ リポートフレーム追加</button>
-                            </div>
-                            
-                            <div class="frame-type">
-                                <h5>コールフレーム</h5>
-                                <div id="call-frames"></div>
-                                <button type="button" class="btn-add" onclick="addFrame('call')">+ コールフレーム追加</button>
-                            </div>
-                            
-                            <div class="frame-type">
-                                <h5>特別フレーム</h5>
-                                <div id="special-frames"></div>
-                                <button type="button" class="btn-add" onclick="addFrame('special')">+ 特別フレーム追加</button>
-                            </div>
-                        </div>
-                    </div>
-                    
-                    <div class="form-section">
-                        <h4>備考</h4>
-                        <div class="form-group">
-                            <label for="notes">メモ・備考 (カンマ区切り):</label>
-                            <textarea id="notes" class="form-textarea" placeholder="例: 特別企画あり, ゲスト多数出演"></textarea>
-                        </div>
-                    </div>
-                    
-                    <div class="form-actions">
-                        <button type="button" class="btn btn-primary" onclick="saveMetadata()">保存</button>
-                        <button type="button" class="btn btn-secondary" onclick="cancelEdit()">キャンセル</button>
-                        <button type="button" class="btn btn-danger" onclick="deleteProgram()" style="margin-left: auto;">削除</button>
-                    </div>
-                </form>
+            <div id="dataflow-display" class="data-display">
+                <div class="empty-data">
+                    上記で番組・週・段階を選択して「データフロー実行・分析」ボタンをクリックしてください
+                </div>
             </div>
             
-            <div id="metadata-display" class="metadata-display">
-                <div class="empty-metadata">
-                    番組を選択してメタデータを編集してください
+            <div id="dataflow-stage-summary" style="margin-top: 20px; display: none;">
+                <div style="background: #f8f9fa; border-radius: 8px; padding: 20px;">
+                    <h4 style="color: #2d3748; margin-bottom: 15px;">📊 段階別データサマリー</h4>
+                    <div id="stage-summary-content"></div>
                 </div>
             </div>
         </div>
 
-        <!-- タブ3: 番組一覧表 -->
+        <!-- タブ4: 番組一覧表 -->
         <div id="tab-table" class="tab-content">
             <div style="text-align: center; margin-bottom: 30px;">
-                <h3 style="color: #2d3748; margin-bottom: 10px;">📊 番組一覧表</h3>
-                <p style="color: #718096;">全番組のエピソード情報を表形式で確認できます</p>
+                <h3 style="color: #2d3748; margin-bottom: 10px;">📊 番組別詳細表</h3>
+                <p style="color: #718096;">選択した番組の詳細データを表形式で確認できます</p>
             </div>
 
             <div class="table-controls">
-                <button onclick="loadProgramTable()" class="btn btn-primary">
-                    番組データを読み込み
-                </button>
-                <div class="table-filters" style="display: none;">
-                    <input type="text" id="program-filter" placeholder="番組名でフィルタ..." 
-                           onkeyup="filterProgramTable()" class="form-control" style="width: 200px;">
+                <div style="display: flex; gap: 20px; margin-bottom: 20px;">
+                    <div class="control-group">
+                        <label for="program-select-table" style="font-weight: 600; color: #2d3748; margin-bottom: 8px; display: block;">番組を選択:</label>
+                        <select id="program-select-table" class="form-select" style="width: 300px;">
+                            <option value="">番組を選択してください</option>
+                            <option value="ちょうどいいラジオ">ちょうどいいラジオ</option>
+                            <option value="PRIME TIME">PRIME TIME</option>
+                            <option value="FLAG">FLAG</option>
+                            <option value="God Bless Saturday">God Bless Saturday</option>
+                            <option value="Route 847">Route 847</option>
+                            <option value="CHOICES">CHOICES</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label for="week-select-table" style="font-weight: 600; color: #2d3748; margin-bottom: 8px; display: block;">対象週を選択:</label>
+                        <select id="week-select-table" class="form-select" style="width: 200px;">
+                            <option value="thisWeek">今週</option>
+                            <option value="nextWeek">来週</option>
+                            <option value="nextWeek2">2週先</option>
+                            <option value="nextWeek3">3週先</option>
+                        </select>
+                    </div>
                 </div>
+                <button onclick="loadSingleProgramTable()" class="btn btn-primary">
+                    番組詳細データを表示
+                </button>
             </div>
 
             <div id="table-display" class="data-display">
                 <div class="empty-data">
-                    上記のボタンをクリックして番組データを読み込んでください
+                    上記で番組を選択して「番組詳細データを表示」ボタンをクリックしてください
                 </div>
-            </div>
-        </div>
-
-        <!-- タブ4: データ構造確認 -->
-        <div id="tab-debug" class="tab-content">
-            <div style="text-align: center; margin-bottom: 30px;">
-                <h3 style="color: #2d3748; margin-bottom: 10px;">🔍 データ構造確認</h3>
-                <p style="color: #718096;">取得されたProgramDataの全体構造をJSON形式で確認できます</p>
             </div>
             
-            <div class="debug-controls">
-                <div class="control-group">
-                    <label for="debug-program-select">番組選択:</label>
-                    <select id="debug-program-select" class="form-select">
-                        <option value="">番組を選択してください</option>
-                        <option value="ちょうどいいラジオ">ちょうどいいラジオ</option>
-                        <option value="PRIME TIME">PRIME TIME</option>
-                        <option value="FLAG">FLAG</option>
-                        <option value="Route 847">Route 847</option>
-                        <option value="God Bless Saturday">God Bless Saturday</option>
-                    </select>
-                </div>
-                
-                <div class="control-group">
-                    <label for="debug-week-select">対象週:</label>
-                    <select id="debug-week-select" class="form-select">
-                        <option value="thisWeek">今週</option>
-                        <option value="nextWeek">翌週</option>
-                    </select>
-                </div>
-                
-                <div class="control-group">
-                    <label for="data-mode-select">データ形式:</label>
-                    <select id="data-mode-select" class="form-select">
-                        <option value="raw">Raw Data (生データ)</option>
-                        <option value="filtered">Filtered Data (番組のみ)</option>
-                        <option value="simplified">Simplified Data (簡素化)</option>
-                        <option value="rawprogram">Raw Program Data (完全生データ)</option>
-                        <option value="metadata">Program Metadata (番組メタデータ)</option>
-                    </select>
-                </div>
-                
-                <button class="btn btn-primary" onclick="loadSelectedProgramData()">
-                    データ取得
-                </button>
-            </div>
-
-            <div id="debug-display" class="debug-display">
-                <div class="debug-header">
-                    <span class="debug-title">JSON データ構造</span>
-                    <button class="copy-btn" onclick="copyJsonToClipboard()" style="display: none;" id="copy-json-btn">
-                        📋 コピー
+            <!-- デバッグログ表示エリア -->
+            <div id="debug-log-section" style="margin-top: 20px; display: none;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <h4 style="margin: 0; color: #e53e3e;">🐛 デバッグログ</h4>
+                    <button id="hide-debug-btn" onclick="hideDebugLog()" class="btn" style="background: #f56565; color: white; font-size: 0.8rem; padding: 5px 10px;">
+                        ログを隠す
                     </button>
                 </div>
-                <pre class="json-container"><code id="json-output">番組を選択して「全データ構造取得」ボタンを押してください</code></pre>
+                <div id="debug-log-content" style="background: #1a202c; color: #e2e8f0; padding: 15px; border-radius: 5px; font-family: monospace; font-size: 0.85rem; max-height: 400px; overflow-y: auto; white-space: pre-wrap;">
+                </div>
+            </div>
+            
+            <!-- デバッグログ表示ボタン -->
+            <div id="debug-controls" style="margin-top: 15px; text-align: center; display: none;">
+                <button id="show-debug-btn" onclick="showDebugLog()" class="btn" style="background: #4299e1; color: white; font-size: 0.9rem;">
+                    🐛 デバッグログを表示
+                </button>
             </div>
         </div>
+
 
         <!-- 実行結果セクション -->
         <div class="results-section">
@@ -1276,7 +1202,7 @@
 
     <script>
         // プログラム実行関数マッピング
-        const programFunctions = {
+        var programFunctions = {
             'choudo': 'webAppAutoGenerateChoudo',
             'primetime': 'webAppAutoGeneratePrimeTime', 
             'flag': 'webAppAutoGenerateFlag',
@@ -1284,7 +1210,7 @@
             'godbless': 'webAppAutoGenerateGodBless'
         };
 
-        const programNames = {
+        var programNames = {
             'choudo': 'ちょうどいいラジオ',
             'primetime': 'PRIME TIME',
             'flag': 'FLAG', 
@@ -1295,14 +1221,16 @@
         // タブ切り替え
         function switchTab(tabName) {
             // 全タブを非表示
-            document.querySelectorAll('.tab-content').forEach(tab => {
-                tab.classList.remove('active');
-            });
+            var tabs = document.querySelectorAll('.tab-content');
+            for (var i = 0; i < tabs.length; i++) {
+                tabs[i].classList.remove('active');
+            }
             
             // 全タブボタンを非アクティブ
-            document.querySelectorAll('.tab-button').forEach(btn => {
-                btn.classList.remove('active');
-            });
+            var buttons = document.querySelectorAll('.tab-button');
+            for (var j = 0; j < buttons.length; j++) {
+                buttons[j].classList.remove('active');
+            }
             
             // 指定タブを表示
             document.getElementById('tab-' + tabName).classList.add('active');
@@ -1311,10 +1239,10 @@
 
         // 単一番組実行
         function executeProgram(programKey) {
-            const button = event.target;
-            const statusEl = document.getElementById('status-' + programKey);
-            const functionName = programFunctions[programKey];
-            const programName = programNames[programKey];
+            var button = event.target;
+            var statusEl = document.getElementById('status-' + programKey);
+            var functionName = programFunctions[programKey];
+            var programName = programNames[programKey];
 
             button.disabled = true;
             button.classList.add('loading');
@@ -1350,14 +1278,17 @@
         function executeAllPrograms() {
             addResult('🚀 全番組の一括実行を開始します', 'info');
             
-            Object.keys(programFunctions).forEach((programKey, index) => {
-                setTimeout(() => {
-                    const button = document.querySelector('[onclick="executeProgram(\'' + programKey + '\')"]');
-                    if (button && !button.disabled) {
-                        button.click();
-                    }
-                }, index * 2000);
-            });
+            var programKeys = Object.keys(programFunctions);
+            for (var k = 0; k < programKeys.length; k++) {
+                (function(programKey, index) {
+                    setTimeout(function() {
+                        var button = document.querySelector('[onclick="executeProgram(\'' + programKey + '\')"]');
+                        if (button && !button.disabled) {
+                            button.click();
+                        }
+                    }, index * 2000);
+                })(programKeys[k], k);
+            }
         }
 
         // テスト実行
@@ -1365,15 +1296,16 @@
             addResult('🧪 テスト実行を開始します', 'info');
             
             google.script.run
-                .withSuccessHandler((results) => {
+                .withSuccessHandler(function(results) {
                     addResult('📊 テスト実行結果:', 'info');
-                    results.forEach(result => {
-                        const status = result.success ? '✅' : '❌';
-                        const docxStatus = result.docxSent ? ' (Docx送信成功)' : ' (Docx送信失敗)';
+                    for (var r = 0; r < results.length; r++) {
+                        var result = results[r];
+                        var status = result.success ? '✅' : '❌';
+                        var docxStatus = result.docxSent ? ' (Docx送信成功)' : ' (Docx送信失敗)';
                         addResult(status + ' ' + result.program + ': ' + (result.success ? '成功' : result.error) + (result.success ? docxStatus : ''), result.success ? 'success' : 'error');
-                    });
+                    }
                 })
-                .withFailureHandler((error) => {
+                .withFailureHandler(function(error) {
                     addResult('❌ テスト実行エラー: ' + (error.message || error.toString()), 'error');
                 })
                 .webAppTestAllGeneration();
@@ -1384,7 +1316,7 @@
             addResult('🔧 設定確認を開始します', 'info');
             
             google.script.run
-                .withSuccessHandler((config) => {
+                .withSuccessHandler(function(config) {
                     addResult('📋 設定確認結果:', 'info');
                     addResult('スプレッドシートID: ' + (config.hasSpreadsheetId ? '✅ 設定済み' : '❌ 未設定'), config.hasSpreadsheetId ? 'success' : 'error');
                     addResult('カレンダーID: ' + (config.hasCalendarId ? '✅ 設定済み' : '❌ 未設定'), config.hasCalendarId ? 'success' : 'error');
@@ -1393,7 +1325,7 @@
                     addResult('ドキュメントテンプレート: ' + (config.hasDocumentTemplates ? '✅ ' + config.templateCount + '件設定済み' : '❌ 未設定'), config.hasDocumentTemplates ? 'success' : 'error');
                     addResult('出力フォルダ: ' + (config.hasOutputFolder ? '✅ 設定済み' : '❌ 未設定'), config.hasOutputFolder ? 'success' : 'error');
                 })
-                .withFailureHandler((error) => {
+                .withFailureHandler(function(error) {
                     addResult('❌ 設定確認エラー: ' + (error.message || error.toString()), 'error');
                 })
                 .webAppGetConfigInfo();
@@ -1947,10 +1879,10 @@
         document.addEventListener('DOMContentLoaded', function() {
             addResult('📻 ラジオ番組ドキュメント自動生成アプリが準備完了しました', 'info');
             
-            setTimeout(() => {
+            setTimeout(function() {
                 google.script.run
-                    .withSuccessHandler((config) => {
-                        const allConfigured = config.hasSpreadsheetId && config.hasCalendarId && 
+                    .withSuccessHandler(function(config) {
+                        var allConfigured = config.hasSpreadsheetId && config.hasCalendarId && 
                                             config.hasEmailAddress && config.hasDocumentTemplates && 
                                             config.hasOutputFolder;
                         
@@ -1960,12 +1892,233 @@
                             addResult('⚠️ 一部の設定が不完全です。「設定確認」ボタンで詳細を確認してください', 'warning');
                         }
                     })
-                    .withFailureHandler((error) => {
+                    .withFailureHandler(function(error) {
                         addResult('⚠️ 初期設定確認でエラーが発生しました。設定を確認してください', 'warning');
                     })
                     .webAppGetConfigInfo();
             }, 1000);
         });
+
+        // データフロー分析関数群
+        function loadDataFlowAnalysis() {
+            const programSelect = document.getElementById('dataflow-program-select');
+            const weekSelect = document.getElementById('dataflow-week-select');
+            const stageSelect = document.getElementById('dataflow-stage-select');
+            
+            const programName = programSelect.value;
+            const weekType = weekSelect.value;
+            const targetStage = stageSelect.value;
+            
+            if (!programName) {
+                addResult('⚠️ 番組を選択してください', 'warning');
+                return;
+            }
+            
+            const dataflowDisplay = document.getElementById('dataflow-display');
+            dataflowDisplay.innerHTML = '<div class="loading-data">データフロー実行中...</div>';
+            
+            // まず番組データを実行してデバッグデータを生成
+            addResult('🔍 データフロー分析開始: ' + programName + ' (' + (weekType === 'thisWeek' ? '今週' : '来週') + ')', 'info');
+            
+            google.script.run
+                .withSuccessHandler((result) => {
+                    if (result && result.success) {
+                        // 番組データの実行が完了したら、デバッグデータを取得
+                        fetchDebugData(targetStage, programName, weekType);
+                    } else {
+                        dataflowDisplay.innerHTML = `<div class="error-data">データフロー実行エラー: ${result.error || '不明なエラー'}</div>`;
+                        addResult('❌ データフロー実行に失敗しました', 'error');
+                    }
+                })
+                .withFailureHandler((error) => {
+                    dataflowDisplay.innerHTML = `<div class="error-data">実行エラー: ${error.message}</div>`;
+                    addResult('❌ データフロー実行エラー: ' + (error.message || error.toString()), 'error');
+                })
+                .webAppGetProgramData(programName, weekType);
+        }
+        
+        function fetchDebugData(targetStage, programName, weekType) {
+            google.script.run
+                .withSuccessHandler((debugResult) => {
+                    if (debugResult && debugResult.success) {
+                        displayDataFlowAnalysis(debugResult.data, targetStage, programName, weekType);
+                        addResult('✅ データフロー分析完了: ' + debugResult.dataCount + '件のデバッグデータ', 'success');
+                    } else {
+                        const dataflowDisplay = document.getElementById('dataflow-display');
+                        dataflowDisplay.innerHTML = `<div class="error-data">デバッグデータ取得エラー: ${debugResult.error || '不明なエラー'}</div>`;
+                        addResult('❌ デバッグデータ取得に失敗しました', 'error');
+                    }
+                })
+                .withFailureHandler((error) => {
+                    const dataflowDisplay = document.getElementById('dataflow-display');
+                    dataflowDisplay.innerHTML = `<div class="error-data">デバッグデータ取得エラー: ${error.message}</div>`;
+                    addResult('❌ デバッグデータ取得エラー: ' + (error.message || error.toString()), 'error');
+                })
+                .webAppGetDebugData(targetStage === 'all' ? undefined : targetStage);
+        }
+        
+        function displayDataFlowAnalysis(debugData, targetStage, programName, weekType) {
+            const dataflowDisplay = document.getElementById('dataflow-display');
+            const stageSummary = document.getElementById('dataflow-stage-summary');
+            const summaryContent = document.getElementById('stage-summary-content');
+            
+            if (!debugData || Object.keys(debugData).length === 0) {
+                dataflowDisplay.innerHTML = '<div class="empty-data">デバッグデータが見つかりません</div>';
+                return;
+            }
+            
+            // 段階別にデータを整理
+            const stageGroups = {};
+            Object.entries(debugData).forEach(([key, data]) => {
+                const stage = data.stage;
+                if (!stageGroups[stage]) {
+                    stageGroups[stage] = [];
+                }
+                stageGroups[stage].push({ key, data });
+            });
+            
+            // 段階順にソート
+            const stageOrder = [
+                '1-INPUT-SHEET', '2-MARKERS-DETECTED', '3-DATE-RANGES', 
+                '4-STRUCTURED-PROGRAMS', '5-FINAL-WEEK-DATA', '6-WEBAPP-INPUT',
+                '7-RAW-WEEK-DATA', '8-TRANSFORMED-WEEK-DATA', '9-WEBAPP-FINAL-OUTPUT'
+            ];
+            
+            var html = '<div style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">' +
+                '<h4 style="color: #2d3748; margin: 0 0 5px 0;">' + programName + ' のデータフロー分析</h4>' +
+                '<p style="color: #718096; margin: 0; font-size: 0.9rem;">対象: ' + (weekType === 'thisWeek' ? '今週' : '来週') + ' | 段階: ' + (targetStage === 'all' ? '全段階' : targetStage) + ' | データ数: ' + Object.keys(debugData).length + '件</p>' +
+                '</div>';
+            
+            // 段階別サマリーを作成
+            var summaryHtml = '';
+            var displayedStages = 0;
+            
+            stageOrder.forEach(function(stage) {
+                if (stageGroups[stage] && (targetStage === 'all' || targetStage === stage)) {
+                    displayedStages++;
+                    var stageData = stageGroups[stage][0]; // 最新のデータを使用
+                    var data = stageData.data;
+                    
+                    summaryHtml += '<div style="margin-bottom: 15px; padding: 10px; background: white; border-radius: 6px; border-left: 4px solid #667eea;">' +
+                        '<div style="display: flex; justify-content: space-between; align-items: center;">' +
+                        '<strong>' + getStageDisplayName(stage) + '</strong>' +
+                        '<span style="color: #718096; font-size: 0.85rem;">' + data.timestamp + '</span>' +
+                        '</div>' +
+                        '<div style="margin-top: 5px; font-size: 0.9rem; color: #4a5568;">' +
+                        'データ型: ' + data.dataType + ' ' + (data.isArray ? '(配列)' : '') + ' | ' +
+                        (data.dataType === 'object' ? 'キー数: ' + data.keyCount : '値: ' + (typeof data.data === 'string' ? data.data.substring(0, 50) + '...' : JSON.stringify(data.data).substring(0, 50) + '...')) +
+                        '</div>' +
+                        '</div>';
+                    
+                    html += '<div style="margin-bottom: 30px;">' +
+                        '<h5 style="color: #2d3748; margin-bottom: 10px; padding-bottom: 5px; border-bottom: 2px solid #e2e8f0;">' +
+                        getStageDisplayName(stage) +
+                        '</h5>' +
+                        '<div style="background: #f7fafc; padding: 10px; border-radius: 6px; margin-bottom: 10px; font-size: 0.9rem;">' +
+                        '<strong>コンテキスト:</strong> ' + data.context + '<br>' +
+                        '<strong>タイムスタンプ:</strong> ' + data.timestamp + '<br>' +
+                        '<strong>データ型:</strong> ' + data.dataType + ' ' + (data.isArray ? '(配列)' : '') + ' | ' +
+                        (data.dataType === 'object' ? 'キー数: ' + data.keyCount : '') +
+                        '</div>' +
+                        '<div style="max-height: 400px; overflow-y: auto;">' +
+                        '<pre style="background: #1a202c; color: #e2e8f0; padding: 15px; border-radius: 6px; font-size: 0.8rem; line-height: 1.4; margin: 0;">' + syntaxHighlightJSON(JSON.stringify(data.data, null, 2)) + '</pre>' +
+                        '</div>' +
+                        '</div>';
+                }
+            });
+            
+            if (displayedStages > 0) {
+                dataflowDisplay.innerHTML = html;
+                summaryContent.innerHTML = summaryHtml;
+                stageSummary.style.display = 'block';
+            } else {
+                dataflowDisplay.innerHTML = '<div class="empty-data">指定された段階のデータが見つかりません</div>';
+                stageSummary.style.display = 'none';
+            }
+        }
+        
+        function getStageDisplayName(stage) {
+            const stageNames = {
+                '1-INPUT-SHEET': '1. シート入力データ',
+                '2-MARKERS-DETECTED': '2. マーカー検出結果',
+                '3-DATE-RANGES': '3. 日付範囲計算結果',
+                '4-STRUCTURED-PROGRAMS': '4. 番組構造化結果',
+                '5-FINAL-WEEK-DATA': '5. 週データ最終形',
+                '6-WEBAPP-INPUT': '6. WebApp入力パラメータ',
+                '7-RAW-WEEK-DATA': '7. 生週データ',
+                '8-TRANSFORMED-WEEK-DATA': '8. データ変換後',
+                '9-WEBAPP-FINAL-OUTPUT': '9. WebApp最終出力'
+            };
+            return stageNames[stage] || stage;
+        }
+        
+        function syntaxHighlightJSON(json) {
+            return json
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;')
+                .replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+                    let cls = 'json-number';
+                    if (/^"/.test(match)) {
+                        if (/:$/.test(match)) {
+                            cls = 'json-key';
+                        } else {
+                            cls = 'json-string';
+                        }
+                    } else if (/true|false/.test(match)) {
+                        cls = 'json-boolean';
+                    } else if (/null/.test(match)) {
+                        cls = 'json-null';
+                    }
+                    return '<span style="color: ' + getJSONColor(cls) + '">' + match + '</span>';
+                });
+        }
+        
+        function getJSONColor(cls) {
+            const colors = {
+                'json-key': '#d73a49',
+                'json-string': '#032f62', 
+                'json-number': '#005cc5',
+                'json-boolean': '#e36209',
+                'json-null': '#6f42c1'
+            };
+            return colors[cls] || '#e2e8f0';
+        }
+        
+        function clearDataFlowData() {
+            google.script.run
+                .withSuccessHandler(() => {
+                    document.getElementById('dataflow-display').innerHTML = '<div class="empty-data">デバッグデータをクリアしました</div>';
+                    document.getElementById('dataflow-stage-summary').style.display = 'none';
+                    addResult('🗑️ デバッグデータをクリアしました', 'info');
+                })
+                .withFailureHandler((error) => {
+                    addResult('❌ データクリアエラー: ' + (error.message || error.toString()), 'error');
+                })
+                .clearDebugData();
+        }
+        
+        function exportDebugData() {
+            const programSelect = document.getElementById('dataflow-program-select');
+            const weekSelect = document.getElementById('dataflow-week-select');
+            const programName = programSelect.value || 'all';
+            const weekType = weekSelect.value || 'all';
+            
+            google.script.run
+                .withSuccessHandler((result) => {
+                    if (result && result.success) {
+                        // Google Driveに保存されたURLを表示
+                        const fileName = `debug_${programName}_${weekType}_${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+                        addResult('💾 デバッグデータをエクスポートしました: ' + fileName, 'success');
+                    } else {
+                        addResult('❌ エクスポートに失敗しました', 'error');
+                    }
+                })
+                .withFailureHandler((error) => {
+                    addResult('❌ エクスポートエラー: ' + (error.message || error.toString()), 'error');
+                })
+                .webAppGetDebugData();
+        }
 
         // Google Apps Script用のstub（実際の環境では不要）
         if (typeof google === 'undefined') {
@@ -2097,8 +2250,156 @@
                 .withFailureHandler(function(error) {
                     tableDisplay.innerHTML = `<div class="error-data">読み込みエラー: ${error.message}</div>`;
                 })
-                .webAppGetProgramsAsTable();
+                .webAppGetSingleProgramTable(selectedProgram);
         }
+
+        // 番組別転置テーブルの読み込み（メイン関数）
+        function loadSingleProgramTable() {
+            loadTransposedProgramTable(); // 転置テーブルを直接呼び出し
+        }
+
+        // 転置テーブル形式の番組詳細表を読み込み
+        function loadTransposedProgramTable() {
+            const programSelect = document.getElementById('program-select-table');
+            const weekSelect = document.getElementById('week-select-table');
+            const selectedProgram = programSelect.value;
+            const selectedWeek = weekSelect.value;
+            const tableDisplay = document.getElementById('table-display');
+            
+            // 番組選択の厳密な検証
+            if (!selectedProgram || selectedProgram.trim() === '' || selectedProgram === 'undefined') {
+                tableDisplay.innerHTML = '<div class="error-data">番組を選択してください</div>';
+                displayDebugLog([`[ERROR] 不正な番組選択: "${selectedProgram}"`]);
+                return;
+            }
+            
+            // デバッグ情報を表示
+            displayDebugLog([`[INFO] 番組選択: "${selectedProgram}", 週: "${selectedWeek}"`]);
+            
+            // ローディング表示  
+            const weekLabelMap = {
+                'thisWeek': '今週',
+                'nextWeek': '来週', 
+                'nextWeek2': '来週の次',
+                'nextWeek3': '来週の次の次'
+            };
+            const weekLabel = weekLabelMap[selectedWeek] || '今週';
+            tableDisplay.innerHTML = `<div class="loading-data">${weekLabel}の転置テーブルを生成中...</div>`;
+            
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    if (result.success) {
+                        displayTransposedTable(result);
+                    } else {
+                        tableDisplay.innerHTML = `<div class="error-data">エラー: ${result.error}</div>`;
+                        // エラーでもデバッグログを表示
+                        if (result.debugLogs) {
+                            displayDebugLog(result.debugLogs);
+                        }
+                    }
+                })
+                .withFailureHandler(function(error) {
+                    tableDisplay.innerHTML = '<div class="error-data">読み込みエラー: ' + error.message + '</div>';
+                    // 通信エラーの場合のログ
+                    displayDebugLog(['[ERROR] 通信エラー: ' + error.message, '[DEBUG] スタックトレース: ' + (error.stack || 'なし')]);
+                })
+                .generateTransposedProgramTable(selectedProgram, selectedWeek);
+        }
+
+        // 転置テーブルの表示（日付が列、項目が行）
+        function displayTransposedTable(result) {
+            const tableDisplay = document.getElementById('table-display');
+            
+            // デバッグログを表示
+            if (result.debugLogs) {
+                displayDebugLog(result.debugLogs);
+            }
+            
+            if (!result.data || !result.data.headers || !result.data.rows) {
+                tableDisplay.innerHTML = `<div class="empty-data">転置テーブルデータが取得できませんでした</div>`;
+                return;
+            }
+
+            const data = result.data;
+            
+            // 番組情報ヘッダー
+            let html = `
+                <div style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
+                    <h4 style="color: #2d3748; margin: 0 0 5px 0;">${data.programName}</h4>
+                    <p style="color: #718096; margin: 0; font-size: 0.9rem;">項目数: ${data.rows.length}項目 | 期間: ${data.headers.length - 1}日間</p>
+                </div>
+                <div style="overflow-x: auto;">
+                    <table class="data-table transposed-table" id="transposed-detail-table" style="min-width: 800px;">
+                        <thead>
+                            <tr>
+            `;
+
+            // ヘッダー行（項目 + 日付列）
+            data.headers.forEach((header, index) => {
+                const isFirstColumn = index === 0;
+                const style = isFirstColumn 
+                    ? 'background: #2d3748; color: white; font-weight: bold; min-width: 150px; position: sticky; left: 0; z-index: 1;' 
+                    : 'background: #4a5568; color: white; min-width: 120px; text-align: center;';
+                html += `<th style="${style}">${header}</th>`;
+            });
+
+            html += `
+                            </tr>
+                        </thead>
+                        <tbody>
+            `;
+
+            // データ行（各項目）
+            data.rows.forEach((row, rowIndex) => {
+                html += '<tr>';
+                
+                row.forEach((cell, cellIndex) => {
+                    const isFirstColumn = cellIndex === 0;
+                    const isEmptyData = cell === 'ー' || cell === '' || cell == null;
+                    
+                    let cellStyle = '';
+                    let cellClass = '';
+                    
+                    if (isFirstColumn) {
+                        // 項目名列（固定）
+                        cellStyle = 'background: #f7fafc; font-weight: bold; position: sticky; left: 0; z-index: 1; border-right: 2px solid #e2e8f0;';
+                        cellClass = 'item-name-cell';
+                    } else {
+                        // データ列
+                        cellStyle = isEmptyData 
+                            ? 'text-align: center; color: #a0aec0; font-style: italic;'
+                            : 'word-wrap: break-word; font-size: 0.85rem; line-height: 1.3;';
+                        cellClass = isEmptyData ? 'empty-cell' : 'data-cell';
+                    }
+                    
+                    const maxWidth = isFirstColumn ? '150px' : '120px';
+                    const displayText = isEmptyData && !isFirstColumn ? 'ー' : cell;
+                    
+                    html += `<td class="${cellClass}" style="${cellStyle} max-width: ${maxWidth}; padding: 8px;">${displayText}</td>`;
+                });
+                
+                html += '</tr>';
+            });
+
+            html += '</tbody></table></div>';
+            
+            // 補助情報
+            html += `
+                <div style="margin-top: 15px; padding: 10px; background: #e6fffa; border-left: 4px solid #38b2ac; border-radius: 4px; font-size: 0.85rem;">
+                    <strong>転置テーブル表示:</strong> 
+                    項目を行として、日付を列として表示しています。横スクロールで全ての日付が確認できます。
+                </div>
+                <div style="margin-top: 10px; padding: 10px; background: #f0f0f0; border-radius: 5px; font-size: 0.8rem; color: #666;">
+                    <strong>デバッグ情報:</strong> 
+                    ${data.programName} - ${data.rows.length}項目 × ${data.headers.length - 1}日のデータを転置表示
+                </div>
+            `;
+            
+            tableDisplay.innerHTML = html;
+        }
+
+        // 通常テーブル表示機能（転置テーブル専用のため削除済み）
+        // displaySingleProgramTable 関数は転置テーブル専用インターフェースのため削除
 
         // 番組一覧表の表示
         function displayProgramTable(programs) {
@@ -2200,8 +2501,8 @@
 
         // エピソード詳細の表示切り替え
         function toggleEpisodeDetails(index) {
-            const detailsRow = document.getElementById(`episode-details-${index}`);
-            const button = document.getElementById(`detail-btn-${index}`);
+            var detailsRow = document.getElementById('episode-details-' + index);
+            var button = document.getElementById('detail-btn-' + index);
             
             if (detailsRow.style.display === 'none') {
                 detailsRow.style.display = '';
@@ -2262,6 +2563,49 @@
                     tbody.appendChild(detailsRow);
                 }
             });
+        }
+        
+        // デバッグログ関連の機能
+        function showDebugLog() {
+            document.getElementById('debug-log-section').style.display = 'block';
+            document.getElementById('debug-controls').style.display = 'none';
+        }
+        
+        function hideDebugLog() {
+            document.getElementById('debug-log-section').style.display = 'none';
+            document.getElementById('debug-controls').style.display = 'block';
+        }
+        
+        function displayDebugLog(logs) {
+            var logContent = document.getElementById('debug-log-content');
+            var debugControls = document.getElementById('debug-controls');
+            
+            if (logs && logs.length > 0) {
+                // ログをフォーマット
+                var formattedLogs = [];
+                for (var i = 0; i < logs.length; i++) {
+                    var timestamp = new Date().toLocaleTimeString();
+                    formattedLogs.push('[' + timestamp + '] ' + logs[i]);
+                }
+                var formattedLog = formattedLogs.join('\n');
+                
+                logContent.textContent = formattedLog;
+                debugControls.style.display = 'block';
+                
+                // エラーが含まれる場合は自動的に表示
+                if (logs.some(log => log.includes('[ERROR]') || log.includes('エラー'))) {
+                    showDebugLog();
+                }
+            } else {
+                logContent.textContent = 'デバッグログがありません';
+                debugControls.style.display = 'none';
+            }
+        }
+        
+        function clearDebugLog() {
+            document.getElementById('debug-log-content').textContent = '';
+            document.getElementById('debug-log-section').style.display = 'none';
+            document.getElementById('debug-controls').style.display = 'none';
         }
     </script>
 </body>

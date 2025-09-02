@@ -24,8 +24,5 @@
     "url": "https://github.com/Yosuke1980/Program_Instraction/issues"
   },
   "homepage": "https://github.com/Yosuke1980/Program_Instraction#readme",
-  "description": "",
-  "dependencies": {
-    "class-validator": "^0.14.2"
-  }
+  "description": ""
 }
