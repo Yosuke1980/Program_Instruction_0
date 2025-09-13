@@ -2429,8 +2429,10 @@ function generateTransposeTable(programName, weekType = 'thisWeek') {
             throw new Error('番組名が指定されていません');
         }
 
-        // 週タイプから週番号に変換
-        const weekNumber = mapWeekTypeToNumber(weekType);
+        // 週タイプから週番号に変換（動的マッピング使用）
+        const config = getConfig();
+        const spreadsheet = SpreadsheetApp.openById(config.SPREADSHEET_ID);
+        const weekNumber = mapWeekTypeToNumber(weekType, spreadsheet);
         if (!weekNumber) {
             throw new Error(`無効な週タイプ: ${weekType}`);
         }
@@ -2452,7 +2454,6 @@ function generateTransposeTable(programName, weekType = 'thisWeek') {
         console.log(`[TRANSPOSE] データ取得成功: ${programName}`);
 
         // CONFIGから番組構造キーを取得
-        const config = getConfig();
         const programStructure = config.PROGRAM_STRUCTURE_KEYS[programName];
 
         if (!programStructure || !Array.isArray(programStructure)) {
@@ -2496,14 +2497,175 @@ function generateTransposeTable(programName, weekType = 'thisWeek') {
 /**
  * 週タイプを番号にマッピング
  */
-function mapWeekTypeToNumber(weekType) {
-    const mapping = {
+/**
+ * シート名から日付を解析してDateオブジェクトを返す
+ */
+function parseSheetDate(sheetName) {
+    try {
+        // "25.3.31-4.06" 形式を解析
+        const match = sheetName.match(/^(\d{2})\.(\d{1,2})\.(\d{1,2})-/);
+        if (!match) return null;
+
+        const year = 2000 + parseInt(match[1]); // 25 → 2025
+        const month = parseInt(match[2]) - 1;   // 3 → 2 (0ベース)
+        const day = parseInt(match[3]);         // 31 → 31
+
+        return new Date(year, month, day);
+    } catch (error) {
+        console.error(`シート名解析エラー: ${sheetName}`, error);
+        return null;
+    }
+}
+
+/**
+ * 今週のシートインデックスを特定
+ */
+function findCurrentWeekIndex(weekSheets, today = new Date()) {
+    const todayMonday = getMondayOfWeek(today);
+
+    for (let i = 0; i < weekSheets.length; i++) {
+        const sheetDate = parseSheetDate(weekSheets[i].getName());
+        if (!sheetDate) continue;
+
+        const sheetMonday = getMondayOfWeek(sheetDate);
+
+        // 同じ週の月曜日かチェック
+        if (sheetMonday.getTime() === todayMonday.getTime()) {
+            console.log(`[DYNAMIC-WEEK] 今週のシート特定: ${weekSheets[i].getName()} (index: ${i})`);
+            return i;
+        }
+    }
+
+    console.warn(`[DYNAMIC-WEEK] 今週のシートが見つかりません。最新シートを使用します。`);
+    return weekSheets.length > 0 ? weekSheets.length - 1 : 0;
+}
+
+/**
+ * 指定日の週の月曜日を取得
+ */
+function getMondayOfWeek(date) {
+    const dayOfWeek = date.getDay() === 0 ? 7 : date.getDay(); // 日曜日=7に変換
+    const monday = new Date(date.getTime() - (dayOfWeek - 1) * 24 * 60 * 60 * 1000);
+    monday.setHours(0, 0, 0, 0); // 時間をリセット
+    return monday;
+}
+
+/**
+ * 動的週番号マッピングを生成
+ */
+function getDynamicWeekMapping(spreadsheet) {
+    try {
+        console.log('[DYNAMIC-WEEK] 動的週番号マッピング生成開始');
+
+        const today = new Date();
+        const allSheets = spreadsheet.getSheets();
+
+        // 週形式のシートのみを抽出
+        const weekSheets = allSheets.filter(sheet => {
+            const name = sheet.getName();
+            return name.match(/^\d{2}\.\d{1,2}\.\d{2}-/);
+        });
+
+        console.log(`[DYNAMIC-WEEK] 週シート数: ${weekSheets.length}`);
+
+        if (weekSheets.length === 0) {
+            console.warn('[DYNAMIC-WEEK] 週シートが見つかりません。デフォルトマッピングを使用');
+            return { thisWeek: 1, nextWeek: 2, lastWeek: 0 };
+        }
+
+        // 日付順でソート
+        weekSheets.sort((a, b) => {
+            const dateA = parseSheetDate(a.getName());
+            const dateB = parseSheetDate(b.getName());
+            if (!dateA || !dateB) return 0;
+            return dateA.getTime() - dateB.getTime();
+        });
+
+        // 今週のインデックスを特定
+        const thisWeekIndex = findCurrentWeekIndex(weekSheets, today);
+
+        const mapping = {
+            lastWeek: Math.max(0, thisWeekIndex),        // 前週
+            thisWeek: thisWeekIndex + 1,                 // 今週
+            nextWeek: thisWeekIndex + 2,                 // 来週
+            nextWeek2: thisWeekIndex + 3,                // 再来週
+            nextWeek3: thisWeekIndex + 4                 // その次
+        };
+
+        console.log('[DYNAMIC-WEEK] 動的マッピング生成完了:', mapping);
+        return mapping;
+
+    } catch (error) {
+        console.error('[DYNAMIC-WEEK] マッピング生成エラー:', error);
+        return { thisWeek: 1, nextWeek: 2, lastWeek: 0 };
+    }
+}
+
+/**
+ * 週タイプを番号にマッピング（動的版）
+ */
+function mapWeekTypeToNumber(weekType, spreadsheet = null) {
+    if (spreadsheet) {
+        // 動的マッピングを使用
+        const dynamicMapping = getDynamicWeekMapping(spreadsheet);
+        return dynamicMapping[weekType] || 1;
+    }
+
+    // フォールバック: 従来の固定マッピング
+    const staticMapping = {
         'thisWeek': 1,
         'nextWeek': 2,
         'nextWeek2': 3,
         'nextWeek3': 4
     };
-    return mapping[weekType] || null;
+
+    return staticMapping[weekType] || 1;
+}
+
+/**
+ * 動的週番号システムのテスト関数
+ */
+function testDynamicWeekMapping() {
+    console.log('=== 動的週番号マッピング テスト開始 ===');
+
+    try {
+        const config = getConfig();
+        const spreadsheet = SpreadsheetApp.openById(config.SPREADSHEET_ID);
+
+        console.log('📅 現在日時:', new Date().toISOString());
+
+        // 動的マッピングを生成
+        const dynamicMapping = getDynamicWeekMapping(spreadsheet);
+        console.log('🔄 動的マッピング結果:', dynamicMapping);
+
+        // 各週タイプの番号を確認
+        const weekTypes = ['lastWeek', 'thisWeek', 'nextWeek', 'nextWeek2'];
+
+        weekTypes.forEach(weekType => {
+            const weekNumber = mapWeekTypeToNumber(weekType, spreadsheet);
+            console.log(`📊 ${weekType}: 週番号 ${weekNumber}`);
+
+            // 対応するシート名を特定
+            const targetSheet = getSheetByWeek(spreadsheet, weekNumber - 1);  // 0ベースオフセット
+            const sheetName = targetSheet ? targetSheet.getName() : '見つからず';
+            console.log(`   → シート名: ${sheetName}`);
+        });
+
+        console.log('✅ 動的週番号マッピング テスト完了');
+        return {
+            success: true,
+            mapping: dynamicMapping,
+            timestamp: new Date().toISOString()
+        };
+
+    } catch (error) {
+        console.error('❌ テストエラー:', error);
+        return {
+            success: false,
+            error: error.message,
+            timestamp: new Date().toISOString()
+        };
+    }
 }
 
 /**
@@ -7375,8 +7537,11 @@ function displayActualDataStructure(weekType = 'thisWeek') {
         console.log('週タイプ:', weekType);
 
         // 🚀 統一データ取得エンジンを使用（8回 → 1回読み込み）
-        const weekNumber = mapWeekTypeToNumber(weekType) || 1;
-        console.log(`[UNIFIED-DATA] 週番号: ${weekNumber}, キャッシュ対応データ取得開始`);
+        // 動的週番号マッピングを使用
+        const config = getConfig();
+        const spreadsheet = SpreadsheetApp.openById(config.SPREADSHEET_ID);
+        const weekNumber = mapWeekTypeToNumber(weekType, spreadsheet);
+        console.log(`[UNIFIED-DATA] 動的週番号: ${weekNumber} (${weekType}), キャッシュ対応データ取得開始`);
 
         const unifiedResult = getUnifiedSpreadsheetData(weekNumber, {
             dataType: 'week',
@@ -8514,9 +8679,11 @@ function saveProgramMetadataToSheet(metadata) {
             log(`[DEBUG] バリデーション通過: programName="${programName}"`);
             log(`[DEBUG] 転置テーブル生成開始: ${programName}, 週タイプ: ${weekType}`);
             try {
-                // 週タイプを番号に変換
-                const weekNumber = mapWeekTypeToNumber(weekType);
-                log(`[DEBUG] 週番号: ${weekNumber} (${weekType})`);
+                // 週タイプを番号に変換（動的マッピング使用）
+                const configLocal = getConfig();
+                const spreadsheet = SpreadsheetApp.openById(configLocal.SPREADSHEET_ID);
+                const weekNumber = mapWeekTypeToNumber(weekType, spreadsheet);
+                log(`[DEBUG] 動的週番号: ${weekNumber} (${weekType})`);
                 // 指定された週データを取得
                 log(`[DEBUG] extractWeekByNumber(${weekNumber})を呼び出し中...`);
                 const weekResults = extractWeekByNumber(weekNumber);
