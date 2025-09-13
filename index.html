@@ -1469,7 +1469,7 @@
         function addFrame(frameType) {
             const frameData = getDefaultFrameData(frameType);
             const container = document.getElementById(frameType + '-frames');
-            const index = container.children.length;
+            const index = container && container.children ? container.children.length : 0;
             addFrameElement(frameType, frameData, index);
         }
         
@@ -2773,7 +2773,7 @@
             let html = `
                 <div style="margin-bottom: 20px; padding: 15px; background: #f8f9fa; border-radius: 8px;">
                     <h4 style="color: #2d3748; margin: 0 0 5px 0;">${data.programName}</h4>
-                    <p style="color: #718096; margin: 0; font-size: 0.9rem;">項目数: ${data.rows.length}項目 | 期間: ${data.headers.length - 1}日間</p>
+                    <p style="color: #718096; margin: 0; font-size: 0.9rem;">項目数: ${data.rows ? data.rows.length : 0}項目 | 期間: ${data.headers ? data.headers.length - 1 : 0}日間</p>
                 </div>
                 <div style="overflow-x: auto;">
                     <table class="data-table transposed-table" id="transposed-detail-table" style="min-width: 800px;">
@@ -2838,7 +2838,7 @@
                 </div>
                 <div style="margin-top: 10px; padding: 10px; background: #f0f0f0; border-radius: 5px; font-size: 0.8rem; color: #666;">
                     <strong>デバッグ情報:</strong> 
-                    ${data.programName} - ${data.rows.length}項目 × ${data.headers.length - 1}日のデータを転置表示
+                    ${data.programName} - ${data.rows ? data.rows.length : 0}項目 × ${data.headers ? data.headers.length - 1 : 0}日のデータを転置表示
                 </div>
             `;
             
@@ -3102,10 +3102,32 @@
                         html += '</div>';
                         html += '</div>';
 
-                        // JSON構造プレビュー（programSummariesを使用）
+                        // 完全なJSON表示（新機能）
+                        if (result.fullJsonData) {
+                            html += '<div style="margin-bottom: 20px;">';
+                            html += '<h5 style="color: #4a5568; margin-bottom: 10px;">📄 完全なJSON情報:</h5>';
+                            html += '<div style="background: #ffffff; padding: 15px; border-radius: 6px; border: 1px solid #e2e8f0;">';
+
+                            // JSONをコピーできるボタンを追加
+                            const jsonString = JSON.stringify(result.fullJsonData, null, 2);
+                            html += `<div style="margin-bottom: 10px; display: flex; gap: 10px; align-items: center;">`;
+                            html += `<button onclick="copyJsonToClipboard('${btoa(jsonString)}')" style="background: #3182ce; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">📋 JSONをコピー</button>`;
+                            html += `<button onclick="downloadJsonFile('${btoa(jsonString)}', 'program_data_${result.weekType}.json')" style="background: #38a169; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">💾 JSONダウンロード</button>`;
+                            html += `<span style="color: #718096; font-size: 0.9rem;">※ 全番組の詳細データが含まれています</span>`;
+                            html += `</div>`;
+
+                            // JSON表示エリア
+                            html += '<div style="background: #f8f9fa; padding: 10px; border-radius: 4px; font-family: monospace; font-size: 12px; max-height: 400px; overflow-y: auto; white-space: pre-wrap; border: 1px solid #e2e8f0;">';
+                            html += escapeHtml(jsonString);
+                            html += '</div>';
+                            html += '</div>';
+                            html += '</div>';
+                        }
+
+                        // JSON構造プレビュー（番組サマリー）
                         if (result.programSummaries && Array.isArray(result.programSummaries)) {
                             html += '<div style="margin-bottom: 20px;">';
-                            html += '<h5 style="color: #4a5568; margin-bottom: 10px;">📊 JSON構造プレビュー:</h5>';
+                            html += '<h5 style="color: #4a5568; margin-bottom: 10px;">📊 番組サマリー:</h5>';
                             html += '<div style="background: #ffffff; padding: 10px; border-radius: 6px; font-family: monospace; max-height: 300px; overflow-y: auto;">';
 
                             result.programSummaries.forEach((program, index) => {
@@ -3234,6 +3256,53 @@
                     </div>
                 `;
             }
+        }
+
+        // JSONユーティリティ関数
+        function copyJsonToClipboard(base64Json) {
+            try {
+                const jsonString = atob(base64Json);
+                navigator.clipboard.writeText(jsonString).then(() => {
+                    alert('JSONがクリップボードにコピーされました！');
+                }).catch(err => {
+                    console.error('コピーに失敗しました:', err);
+                    // フォールバック: テキストエリアを使用
+                    const textArea = document.createElement('textarea');
+                    textArea.value = jsonString;
+                    document.body.appendChild(textArea);
+                    textArea.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(textArea);
+                    alert('JSONがクリップボードにコピーされました！');
+                });
+            } catch (error) {
+                console.error('JSONコピーエラー:', error);
+                alert('JSONのコピーに失敗しました');
+            }
+        }
+
+        function downloadJsonFile(base64Json, filename) {
+            try {
+                const jsonString = atob(base64Json);
+                const blob = new Blob([jsonString], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            } catch (error) {
+                console.error('JSONダウンロードエラー:', error);
+                alert('JSONのダウンロードに失敗しました');
+            }
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
         }
 
         // データ構造クリア関数
