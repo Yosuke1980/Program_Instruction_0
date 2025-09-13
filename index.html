@@ -227,6 +227,25 @@
             transform: translateY(-2px);
             box-shadow: 0 10px 25px rgba(74, 85, 104, 0.3);
         }
+        
+        .btn-info {
+            background: #17a2b8;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(23, 162, 184, 0.2);
+        }
+
+        .btn-info:hover {
+            background: #138496;
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(23, 162, 184, 0.3);
+        }
 
         /* 結果表示セクション */
         .results-section {
@@ -516,14 +535,31 @@
         }
 
         .error-data {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            height: 200px;
+            display: block;
             color: #e53e3e;
             background: #fed7d7;
             border-radius: 8px;
-            text-align: center;
+            padding: 20px;
+            border-left: 4px solid #e53e3e;
+        }
+        
+        .warning-data {
+            display: block;
+            color: #d69e2e;
+            background: #fefcbf;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #d69e2e;
+        }
+        
+        .warning-data h4, .error-data h4 {
+            margin-top: 0;
+            margin-bottom: 15px;
+        }
+        
+        .warning-data ul, .warning-data ol, .error-data ul, .error-data ol {
+            margin-left: 20px;
+            margin-bottom: 10px;
         }
 
         .data-header {
@@ -666,11 +702,11 @@
         }
 
         .json-container .json-string {
-            color: #032f62;
+            color: #2d8659;
         }
 
         .json-container .json-number {
-            color: #005cc5;
+            color: #0d7377;
         }
 
         .json-container .json-boolean {
@@ -968,7 +1004,7 @@
             <ul>
                 <li><button class="tab-button active" onclick="switchTab('generate')">ドキュメント生成</button></li>
                 <li><button class="tab-button" onclick="switchTab('table')">番組別詳細表</button></li>
-                <li><button class="tab-button" onclick="switchTab('dataflow')">データフロー分析</button></li>
+                <li><button class="tab-button" onclick="switchTab('apitest')">API テスト</button></li>
             </ul>
         </div>
 
@@ -1052,76 +1088,7 @@
         </div>
 
 
-        <!-- タブ3: データフロー分析 -->
-        <div id="tab-dataflow" class="tab-content">
-            <div style="text-align: center; margin-bottom: 30px;">
-                <h3 style="color: #2d3748; margin-bottom: 10px;">🔍 データフロー分析</h3>
-                <p style="color: #718096;">各段階でのJSONデータの変換プロセスを確認できます</p>
-            </div>
-
-            <div class="data-controls">
-                <div class="control-group">
-                    <label for="dataflow-program-select">番組を選択:</label>
-                    <select id="dataflow-program-select" class="form-select">
-                        <option value="">番組を選択してください</option>
-                        <option value="ちょうどいいラジオ">ちょうどいいラジオ</option>
-                        <option value="PRIME TIME">PRIME TIME</option>
-                        <option value="FLAG">FLAG</option>
-                        <option value="God Bless Saturday">God Bless Saturday</option>
-                        <option value="Route 847">Route 847</option>
-                    </select>
-                </div>
-                <div class="control-group">
-                    <label for="dataflow-week-select">対象週を選択:</label>
-                    <select id="dataflow-week-select" class="form-select">
-                        <option value="thisWeek">今週</option>
-                        <option value="nextWeek">来週</option>
-                    </select>
-                </div>
-                <div class="control-group">
-                    <label for="dataflow-stage-select">分析段階:</label>
-                    <select id="dataflow-stage-select" class="form-select">
-                        <option value="all">全段階</option>
-                        <option value="1-INPUT-SHEET">1. シート入力</option>
-                        <option value="2-MARKERS-DETECTED">2. マーカー検出</option>
-                        <option value="3-DATE-RANGES">3. 日付範囲計算</option>
-                        <option value="4-STRUCTURED-PROGRAMS">4. 番組構造化</option>
-                        <option value="5-FINAL-WEEK-DATA">5. 週データ最終形</option>
-                        <option value="6-WEBAPP-INPUT">6. WebApp入力</option>
-                        <option value="7-RAW-WEEK-DATA">7. 生週データ</option>
-                        <option value="8-TRANSFORMED-WEEK-DATA">8. データ変換後</option>
-                        <option value="9-WEBAPP-FINAL-OUTPUT">9. WebApp最終出力</option>
-                    </select>
-                </div>
-            </div>
-            
-            <div style="display: flex; gap: 15px; justify-content: center; margin-bottom: 30px;">
-                <button onclick="loadDataFlowAnalysis()" class="btn btn-primary">
-                    データフロー実行・分析
-                </button>
-                <button onclick="clearDataFlowData()" class="btn btn-secondary">
-                    データクリア
-                </button>
-                <button onclick="exportDebugData()" class="btn btn-secondary">
-                    JSONエクスポート
-                </button>
-            </div>
-
-            <div id="dataflow-display" class="data-display">
-                <div class="empty-data">
-                    上記で番組・週・段階を選択して「データフロー実行・分析」ボタンをクリックしてください
-                </div>
-            </div>
-            
-            <div id="dataflow-stage-summary" style="margin-top: 20px; display: none;">
-                <div style="background: #f8f9fa; border-radius: 8px; padding: 20px;">
-                    <h4 style="color: #2d3748; margin-bottom: 15px;">📊 段階別データサマリー</h4>
-                    <div id="stage-summary-content"></div>
-                </div>
-            </div>
-        </div>
-
-        <!-- タブ4: 番組一覧表 -->
+        <!-- タブ3: 番組一覧表 -->
         <div id="tab-table" class="tab-content">
             <div style="text-align: center; margin-bottom: 30px;">
                 <h3 style="color: #2d3748; margin-bottom: 10px;">📊 番組別詳細表</h3>
@@ -1180,6 +1147,107 @@
                 <button id="show-debug-btn" onclick="showDebugLog()" class="btn" style="background: #4299e1; color: white; font-size: 0.9rem;">
                     🐛 デバッグログを表示
                 </button>
+            </div>
+        </div>
+
+        <!-- タブ4: API テスト -->
+        <div id="tab-apitest" class="tab-content">
+            <div style="text-align: center; margin-bottom: 30px;">
+                <h3 style="color: #2d3748; margin-bottom: 10px;">🔧 統一API システムテスト</h3>
+                <p style="color: #718096;">WEB表示・ドキュメント生成用のJSON出力をテスト・検証できます</p>
+            </div>
+
+            <!-- 新機能: データ構造表示・デバッグセクション -->
+            <div class="control-section" style="margin-bottom: 30px;">
+                <h4 style="color: #2d3748; margin-bottom: 15px;">🔍 データ構造表示・デバッグ</h4>
+                <p style="color: #718096; margin-bottom: 15px;">スプレッドシートから読み込まれた実際のデータをJSON形式で表示し、処理順序と配列構造を確認できます</p>
+
+                <div class="control-row">
+                    <button onclick="showActualDataStructure()" class="btn btn-primary" style="margin-right: 10px;">
+                        📊 実データJSON表示
+                    </button>
+                    <button onclick="showProcessingSteps()" class="btn" style="background: #805ad5; color: white; margin-right: 10px;">
+                        ⚙️ 処理ステップ表示
+                    </button>
+                    <button onclick="clearDataStructureDisplay()" class="btn" style="background: #718096; color: white;">
+                        🗑️ クリア
+                    </button>
+                </div>
+
+                <!-- データ構造表示エリア -->
+                <div style="margin-top: 20px;">
+                    <!-- 実データ構造サマリー -->
+                    <div id="data-structure-summary" style="margin-bottom: 15px;"></div>
+
+                    <!-- 実データ構造詳細 -->
+                    <div id="data-structure-display" style="background: #f8f9fa; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; margin-bottom: 20px; min-height: 100px;">
+                        <div class="empty-data">「実データJSON表示」ボタンをクリックしてスプレッドシートの実際のデータ構造を確認</div>
+                    </div>
+
+                    <!-- 処理ステップサマリー -->
+                    <div id="processing-steps-summary" style="margin-bottom: 15px;"></div>
+
+                    <!-- 処理ステップ詳細 -->
+                    <div id="processing-steps-display" style="background: #f8f9fa; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; margin-bottom: 20px; min-height: 100px;">
+                        <div class="empty-data">「処理ステップ表示」ボタンをクリックしてデータ処理の段階的な流れを確認</div>
+                    </div>
+
+                    <!-- コンソールログヒント -->
+                    <div id="console-log-hint"></div>
+                </div>
+            </div>
+
+            <div class="control-section">
+                <h4 style="color: #2d3748; margin-bottom: 15px;">📊 統一API テスト</h4>
+                <div class="control-row">
+                    <div class="control-group">
+                        <label for="api-week-select" style="font-weight: 600; color: #2d3748; margin-bottom: 8px; display: block;">対象週を選択:</label>
+                        <select id="api-week-select" class="form-select" style="width: 150px;">
+                            <option value="thisWeek">今週</option>
+                            <option value="nextWeek">来週</option>
+                        </select>
+                    </div>
+                    <div class="control-group">
+                        <label for="api-output-format" style="font-weight: 600; color: #2d3748; margin-bottom: 8px; display: block;">出力形式:</label>
+                        <select id="api-output-format" class="form-select" style="width: 150px;">
+                            <option value="json">JSON</option>
+                            <option value="structured">構造化データ</option>
+                            <option value="document">ドキュメント用</option>
+                        </select>
+                    </div>
+                </div>
+                <div style="margin-top: 15px;">
+                    <button onclick="testConnectionFunction()" class="btn" style="background: #e53e3e; color: white; margin-right: 10px;">
+                        🔗 接続テスト
+                    </button>
+                    <button onclick="runUnifiedAPITest()" class="btn btn-primary" style="margin-right: 10px;">
+                        🧪 統一API テスト実行
+                    </button>
+                    <button onclick="showAvailableSheets()" class="btn" style="background: #805ad5; color: white; margin-right: 10px;">
+                        📋 シート一覧表示
+                    </button>
+                    <button onclick="validateWebDisplayCompatibility()" class="btn" style="background: #38a169; color: white; margin-right: 10px;">
+                        ✅ WEB表示適合性チェック
+                    </button>
+                    <button onclick="validateDocumentStructure()" class="btn" style="background: #d69e2e; color: white;">
+                        📄 ドキュメント構造検証
+                    </button>
+                </div>
+            </div>
+
+            <div id="api-test-results" class="data-display" style="margin-top: 20px;">
+                <div class="empty-data">
+                    上記のテストボタンをクリックして、JSON出力の検証を実行してください
+                </div>
+            </div>
+
+            <!-- JSON検証結果表示 -->
+            <div id="validation-results" style="margin-top: 20px; display: none;">
+                <h4 style="color: #2d3748; margin-bottom: 15px;">📋 検証結果</h4>
+                <div id="validation-summary" style="background: #f7fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 15px; margin-bottom: 15px;">
+                </div>
+                <div id="validation-details" style="background: #1a202c; color: #e2e8f0; padding: 15px; border-radius: 8px; font-family: monospace; font-size: 0.85rem; max-height: 400px; overflow-y: auto; white-space: pre-wrap;">
+                </div>
             </div>
         </div>
 
@@ -1302,7 +1370,7 @@
                         var result = results[r];
                         var status = result.success ? '✅' : '❌';
                         var docxStatus = result.docxSent ? ' (Docx送信成功)' : ' (Docx送信失敗)';
-                        addResult(status + ' ' + result.program + ': ' + (result.success ? '成功' : result.error) + (result.success ? docxStatus : ''), result.success ? 'success' : 'error');
+                        addResult(status + ' ' + result.program + ': ' + (result.success ? '成功' : (result.error || '不明なエラー')) + (result.success ? docxStatus : ''), result.success ? 'success' : 'error');
                     }
                 })
                 .withFailureHandler(function(error) {
@@ -1899,7 +1967,7 @@
             }, 1000);
         });
 
-        // データフロー分析関数群
+        // === 削除されたデータフロー分析関数群 ===
         function loadDataFlowAnalysis() {
             const programSelect = document.getElementById('dataflow-program-select');
             const weekSelect = document.getElementById('dataflow-week-select');
@@ -1921,38 +1989,76 @@
             addResult('🔍 データフロー分析開始: ' + programName + ' (' + (weekType === 'thisWeek' ? '今週' : '来週') + ')', 'info');
             
             google.script.run
-                .withSuccessHandler((result) => {
+                .withSuccessHandler(function(result) {
                     if (result && result.success) {
-                        // 番組データの実行が完了したら、デバッグデータを取得
-                        fetchDebugData(targetStage, programName, weekType);
+                        // データ記録の完了を待つための遅延実行
+                        addResult('📊 番組データ実行完了。デバッグデータ記録完了を待機中...', 'info');
+                        setTimeout(function() {
+                            fetchDebugData(targetStage, programName, weekType);
+                        }, 2000); // 2秒待機してからデバッグデータを取得
                     } else {
-                        dataflowDisplay.innerHTML = `<div class="error-data">データフロー実行エラー: ${result.error || '不明なエラー'}</div>`;
+                        dataflowDisplay.innerHTML = '<div class="error-data">データフロー実行エラー: ' + (result && result.error ? result.error : '不明なエラー') + '</div>';
                         addResult('❌ データフロー実行に失敗しました', 'error');
                     }
                 })
-                .withFailureHandler((error) => {
-                    dataflowDisplay.innerHTML = `<div class="error-data">実行エラー: ${error.message}</div>`;
+                .withFailureHandler(function(error) {
+                    dataflowDisplay.innerHTML = '<div class="error-data">実行エラー: ' + error.message + '</div>';
                     addResult('❌ データフロー実行エラー: ' + (error.message || error.toString()), 'error');
                 })
                 .webAppGetProgramData(programName, weekType);
         }
         
         function fetchDebugData(targetStage, programName, weekType) {
+            addResult('🔍 デバッグデータ取得開始...', 'info');
+            
             google.script.run
-                .withSuccessHandler((debugResult) => {
+                .withSuccessHandler(function(debugResult) {
                     if (debugResult && debugResult.success) {
-                        displayDataFlowAnalysis(debugResult.data, targetStage, programName, weekType);
-                        addResult('✅ データフロー分析完了: ' + debugResult.dataCount + '件のデバッグデータ', 'success');
+                        if (debugResult.dataCount > 0) {
+                            displayDataFlowAnalysis(debugResult.data, targetStage, programName, weekType);
+                            addResult('✅ データフロー分析完了: ' + debugResult.dataCount + '件のデバッグデータ', 'success');
+                        } else {
+                            var dataflowDisplay = document.getElementById('dataflow-display');
+                            dataflowDisplay.innerHTML = '<div class="warning-data">' +
+                                '<h4>⚠️ デバッグデータが見つかりません</h4>' +
+                                '<p>可能な原因:</p>' +
+                                '<ul>' +
+                                '<li>番組データの実行が完了していない</li>' +
+                                '<li>選択した番組・週の組み合わせでデータが生成されていない</li>' +
+                                '<li>デバッグ記録機能に問題がある</li>' +
+                                '</ul>' +
+                                '<p>対処方法:</p>' +
+                                '<ol>' +
+                                '<li>「ストア状態確認」ボタンで確認</li>' +
+                                '<li>別の番組・週を選択して再実行</li>' +
+                                '<li>「データクリア」後に再実行</li>' +
+                                '</ol>' +
+                                '</div>';
+                            addResult('⚠️ デバッグデータが見つかりません。ストア状態を確認してください', 'warning');
+                        }
                     } else {
-                        const dataflowDisplay = document.getElementById('dataflow-display');
-                        dataflowDisplay.innerHTML = `<div class="error-data">デバッグデータ取得エラー: ${debugResult.error || '不明なエラー'}</div>`;
-                        addResult('❌ デバッグデータ取得に失敗しました', 'error');
+                        var dataflowDisplay = document.getElementById('dataflow-display');
+                        dataflowDisplay.innerHTML = '<div class="error-data">' +
+                            '<h4>❌ デバッグデータ取得エラー</h4>' +
+                            '<p>エラー内容: ' + (debugResult && debugResult.error ? debugResult.error : '不明なエラー') + '</p>' +
+                            '<p>「ストア状態確認」ボタンで詳細を確認してください。</p>' +
+                            '</div>';
+                        addResult('❌ デバッグデータ取得に失敗しました: ' + (debugResult && debugResult.error ? debugResult.error : '不明なエラー'), 'error');
                     }
                 })
-                .withFailureHandler((error) => {
-                    const dataflowDisplay = document.getElementById('dataflow-display');
-                    dataflowDisplay.innerHTML = `<div class="error-data">デバッグデータ取得エラー: ${error.message}</div>`;
-                    addResult('❌ デバッグデータ取得エラー: ' + (error.message || error.toString()), 'error');
+                .withFailureHandler(function(error) {
+                    var dataflowDisplay = document.getElementById('dataflow-display');
+                    dataflowDisplay.innerHTML = '<div class="error-data">' +
+                        '<h4>❌ 通信エラー</h4>' +
+                        '<p>エラー内容: ' + error.message + '</p>' +
+                        '<p>Google Apps Script関数の実行に失敗しました。</p>' +
+                        '<ul>' +
+                        '<li>ネットワーク接続を確認してください</li>' +
+                        '<li>Google Apps Scriptプロジェクトがデプロイされているか確認してください</li>' +
+                        '<li>権限設定を確認してください</li>' +
+                        '</ul>' +
+                        '</div>';
+                    addResult('❌ 通信エラー: ' + (error.message || error.toString()), 'error');
                 })
                 .webAppGetDebugData(targetStage === 'all' ? undefined : targetStage);
         }
@@ -2077,44 +2183,70 @@
         function getJSONColor(cls) {
             const colors = {
                 'json-key': '#d73a49',
-                'json-string': '#032f62', 
-                'json-number': '#005cc5',
+                'json-string': '#2d8659', 
+                'json-number': '#0d7377',
                 'json-boolean': '#e36209',
                 'json-null': '#6f42c1'
             };
             return colors[cls] || '#e2e8f0';
         }
         
+        function checkDebugStore() {
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    if (result && result.success) {
+                        var message = 'ストア状態: ' + result.keyCount + '件のデータ';
+                        if (result.keyCount > 0) {
+                            message += ' - キー: ' + result.keys.join(', ');
+                        }
+                        addResult('🔍 ' + message, 'info');
+                        
+                        var dataflowDisplay = document.getElementById('dataflow-display');
+                        if (result.keyCount === 0) {
+                            dataflowDisplay.innerHTML = '<div class="empty-data">デバッグデータストアは空です。まず番組データを実行してください。</div>';
+                        } else {
+                            dataflowDisplay.innerHTML = '<div class="info-data">デバッグデータ: ' + result.keyCount + '件<br>キー: ' + result.keys.join(', ') + '</div>';
+                        }
+                    } else {
+                        addResult('❌ ストア状態確認エラー: ' + (result && result.error ? result.error : '不明なエラー'), 'error');
+                    }
+                })
+                .withFailureHandler(function(error) {
+                    addResult('❌ ストア状態確認エラー: ' + (error.message || error.toString()), 'error');
+                })
+                .webAppCheckDebugStore();
+        }
+        
         function clearDataFlowData() {
             google.script.run
-                .withSuccessHandler(() => {
+                .withSuccessHandler(function() {
                     document.getElementById('dataflow-display').innerHTML = '<div class="empty-data">デバッグデータをクリアしました</div>';
                     document.getElementById('dataflow-stage-summary').style.display = 'none';
                     addResult('🗑️ デバッグデータをクリアしました', 'info');
                 })
-                .withFailureHandler((error) => {
+                .withFailureHandler(function(error) {
                     addResult('❌ データクリアエラー: ' + (error.message || error.toString()), 'error');
                 })
                 .clearDebugData();
         }
         
         function exportDebugData() {
-            const programSelect = document.getElementById('dataflow-program-select');
-            const weekSelect = document.getElementById('dataflow-week-select');
-            const programName = programSelect.value || 'all';
-            const weekType = weekSelect.value || 'all';
+            var programSelect = document.getElementById('dataflow-program-select');
+            var weekSelect = document.getElementById('dataflow-week-select');
+            var programName = programSelect.value || 'all';
+            var weekType = weekSelect.value || 'all';
             
             google.script.run
-                .withSuccessHandler((result) => {
+                .withSuccessHandler(function(result) {
                     if (result && result.success) {
                         // Google Driveに保存されたURLを表示
-                        const fileName = `debug_${programName}_${weekType}_${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+                        var fileName = 'debug_' + programName + '_' + weekType + '_' + new Date().toISOString().replace(/[:.]/g, '-') + '.json';
                         addResult('💾 デバッグデータをエクスポートしました: ' + fileName, 'success');
                     } else {
                         addResult('❌ エクスポートに失敗しました', 'error');
                     }
                 })
-                .withFailureHandler((error) => {
+                .withFailureHandler(function(error) {
                     addResult('❌ エクスポートエラー: ' + (error.message || error.toString()), 'error');
                 })
                 .webAppGetDebugData();
@@ -2244,7 +2376,7 @@
                         displayProgramTable(result.data);
                         tableFilters.style.display = 'block';
                     } else {
-                        tableDisplay.innerHTML = `<div class="error-data">エラー: ${result.error}</div>`;
+                        tableDisplay.innerHTML = `<div class="error-data">エラー: ${result && result.error ? result.error : '不明なエラー'}</div>`;
                     }
                 })
                 .withFailureHandler(function(error) {
@@ -2255,7 +2387,322 @@
 
         // 番組別転置テーブルの読み込み（メイン関数）
         function loadSingleProgramTable() {
-            loadTransposedProgramTable(); // 転置テーブルを直接呼び出し
+            const programSelect = document.getElementById('program-select-table');
+            const weekSelect = document.getElementById('week-select-table');
+            const selectedProgram = programSelect.value;
+            const selectedWeek = weekSelect.value;
+            const tableDisplay = document.getElementById('table-display');
+
+            if (!selectedProgram || selectedProgram.trim() === '') {
+                tableDisplay.innerHTML = '<div class="error-data">番組を選択してください</div>';
+                return;
+            }
+
+            tableDisplay.innerHTML = '<div class="loading-data">番組データを読み込み中...</div>';
+
+            // APIテストタブで検証済みの関数を直接使用
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    if (result && result.success) {
+                        displayApiTestedProgramTable(result, selectedProgram);
+                    } else {
+                        tableDisplay.innerHTML = '<div class="error-data">データ取得失敗: ' + (result && result.error ? result.error : '不明なエラー') + '</div>';
+                    }
+                })
+                .withFailureHandler(function(error) {
+                    tableDisplay.innerHTML = '<div class="error-data">通信エラー: ' + error.message + '</div>';
+                })
+                .getFormattedProgramData(selectedWeek);
+        }
+
+        // APIテストタブで検証済みのデータ構造を使用した番組表表示関数
+        function displayApiTestedProgramTable(result, selectedProgram) {
+            const tableDisplay = document.getElementById('table-display');
+
+            console.log('displayApiTestedProgramTable called with:', { result, selectedProgram });
+            console.log('result.programSummaries:', result.programSummaries);
+
+            // APIテストタブと同じデータ構造チェック
+            if (!result.programSummaries || !Array.isArray(result.programSummaries)) {
+                tableDisplay.innerHTML = '<div class="error-data">programSummariesが配列ではありません</div>';
+                return;
+            }
+
+            // APIテストタブと同じ方法で番組を検索
+            const targetProgram = result.programSummaries.find(program => program.name === selectedProgram);
+
+            if (!targetProgram) {
+                const availablePrograms = result.programSummaries.map(p => p.name).join(', ');
+                tableDisplay.innerHTML = `<div class="error-data">番組 "${selectedProgram}" が見つかりませんでした。<br>利用可能な番組: ${availablePrograms}</div>`;
+                return;
+            }
+
+            // テーブル形式で表示
+            let html = `<div style="background: #f8f9fa; padding: 20px; border-radius: 8px;">`;
+            html += `<h4 style="color: #2d3748; margin-bottom: 20px;">${targetProgram.name} - 詳細データ</h4>`;
+
+            // サマリー情報（APIテストタブと同じ数値を表示）
+            html += `<div style="display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap;">`;
+            html += `<div style="background: #e6fffa; padding: 15px; border-radius: 6px; border-left: 4px solid #38b2ac;">`;
+            html += `<div style="font-weight: bold; color: #285e61;">エピソード数</div>`;
+            html += `<div style="font-size: 20px; color: #38b2ac;">${targetProgram.episodeCount}</div>`;
+            html += `</div>`;
+            html += `<div style="background: #fef5e7; padding: 15px; border-radius: 6px; border-left: 4px solid #f6ad55;">`;
+            html += `<div style="font-weight: bold; color: #c05621;">楽曲数</div>`;
+            html += `<div style="font-size: 20px; color: #f6ad55;">${targetProgram.totalSongs}</div>`;
+            html += `</div>`;
+            html += `<div style="background: #f0f9ff; padding: 15px; border-radius: 6px; border-left: 4px solid #3182ce;">`;
+            html += `<div style="font-weight: bold; color: #2c5282;">告知数</div>`;
+            html += `<div style="font-size: 20px; color: #3182ce;">${targetProgram.totalAnnouncements}</div>`;
+            html += `</div>`;
+            html += `</div>`;
+
+            // 番組別構造キーを定義（CONFIGと同期）
+            const programStructureKeys = {
+                'ちょうどいいラジオ': [
+                    '7:28パブ告知',
+                    '時間指定なし告知',
+                    'YOKOHAMA PORTSIDE INFORMATION',
+                    '楽曲',
+                    '先行予約',
+                    'ゲスト',
+                    'ラジオショッピング',
+                    'はぴねすくらぶ',
+                    'ヨコアリくん',
+                    '放送後',
+                    'ちょうどいい暮らし収録予定',
+                    'ここが知りたい不動産収録予定',
+                    'ちょうどいい歯ッピー収録予定',
+                    'ちょうどいいおカネの話収録予定',
+                    'ちょうどいいごりごり隊収録予定',
+                    'ビジネスアイ収録予定'
+                ],
+                'PRIME TIME': ['19:41Traffic', '19:43', '20:51', '営業コーナー', '指定曲', 'ゲスト', '時間指定なしパブ', 'ラジショピ', '先行予約・限定予約'],
+                'FLAG': ['12:40 電話パブ', '13:29 パブリシティ', '13:40 パブリシティ', '12:15 リポート案件', '14:29 リポート案件', '時間指定なし告知', '楽曲', '先行予約', 'ゲスト'],
+                'God Bless Saturday': ['楽曲', '14:41パブ', '時間指定なしパブ'],
+                'Route 847': ['リポート 16:47', '営業パブ 17:41', '時間指定なし告知', '楽曲']
+            };
+
+            const structureKeys = programStructureKeys[selectedProgram];
+            if (!structureKeys) {
+                tableDisplay.innerHTML = `<div class="error-data">番組 "${selectedProgram}" の構造キーが定義されていません</div>`;
+                return;
+            }
+
+            // 横軸構造テーブル
+            if (targetProgram.episodes && targetProgram.episodes.length > 0) {
+                html += `<div style="margin-top: 20px;">`;
+                html += `<h5 style="color: #4a5568; margin-bottom: 15px;">📊 構造キー別コンテンツ詳細（横軸表示）</h5>`;
+                html += `<div style="overflow-x: auto;">`;
+                html += `<table style="width: 100%; border-collapse: collapse; background: white; border-radius: 6px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">`;
+
+                // ヘッダー行：項目｜日付1｜日付2...
+                html += `<thead style="background: #2d3748; color: white;">`;
+                html += `<tr><th style="padding: 12px; text-align: left; min-width: 200px;">項目</th>`;
+                targetProgram.episodes.forEach(episode => {
+                    html += `<th style="padding: 12px; text-align: center; min-width: 150px;">${episode.date || 'ー'}(${episode.weekday || 'ー'})</th>`;
+                });
+                html += `</tr></thead><tbody>`;
+
+                // 各構造キーの行
+                structureKeys.forEach((structureKey, keyIndex) => {
+                    const bgColor = keyIndex % 2 === 0 ? '#f8f9fa' : 'white';
+                    html += `<tr style="background: ${bgColor};">`;
+                    html += `<td style="padding: 12px; font-weight: bold; border-bottom: 1px solid #e2e8f0;">${structureKey}</td>`;
+
+                    // 各日付のデータ
+                    targetProgram.episodes.forEach(episode => {
+                        const content = extractStructureKeyContent(episode, structureKey);
+                        html += `<td style="padding: 12px; border-bottom: 1px solid #e2e8f0; max-width: 200px; word-wrap: break-word;">${content}</td>`;
+                    });
+
+                    html += `</tr>`;
+                });
+
+                html += `</tbody></table></div></div>`;
+            } else {
+                html += `<div style="margin-top: 20px; padding: 20px; background: #fef5e7; border-radius: 6px; border-left: 4px solid #f6ad55;">`;
+                html += `<div style="color: #c05621;">この番組にはエピソードデータがありません</div>`;
+                html += `</div>`;
+            }
+
+            html += `</div>`;
+            tableDisplay.innerHTML = html;
+        }
+
+        // 構造キーに対応するコンテンツを抽出する関数
+        function extractStructureKeyContent(episode, structureKey) {
+            // エピソードオブジェクトから構造キーに対応するデータを取得
+            const content = episode[structureKey];
+
+            if (!content) {
+                return 'ー';
+            }
+
+            // 配列の場合はカンマ区切りで結合
+            if (Array.isArray(content)) {
+                if (content.length === 0) {
+                    return 'ー';
+                }
+
+                // 配列内の各要素を適切に文字列化
+                const stringified = content.map(item => {
+                    if (typeof item === 'object' && item !== null) {
+                        // オブジェクトの場合、適切なフィールドを抽出
+                        return item.title || item.name || item.label || item.time || JSON.stringify(item);
+                    }
+                    return String(item);
+                });
+
+                const joined = stringified.join(', ');
+                return joined.length > 100 ? joined.substring(0, 97) + '...' : joined;
+            }
+
+            // 文字列の場合はそのまま返す（長すぎる場合は省略）
+            if (typeof content === 'string') {
+                const trimmed = content.trim();
+                if (trimmed === '') return 'ー';
+                return trimmed.length > 100 ? trimmed.substring(0, 97) + '...' : trimmed;
+            }
+
+            // オブジェクトの場合も適切に処理
+            if (typeof content === 'object') {
+                return content.title || content.name || content.label || content.time || JSON.stringify(content);
+            }
+
+            // その他の場合は文字列に変換
+            return String(content);
+        }
+
+        // === 削除予定の旧関数 ===
+        function displayUnifiedProgramTable(result) {
+            const tableDisplay = document.getElementById('table-display');
+
+            console.log('displayUnifiedProgramTable called with:', result);
+
+            const programData = result.programData;
+
+            // テーブル形式で表示
+            let html = `<div style="background: #f8f9fa; padding: 20px; border-radius: 8px;">`;
+            html += `<h4 style="color: #2d3748; margin-bottom: 20px;">${programData.name} - 詳細データ</h4>`;
+
+            // サマリー情報
+            html += `<div style="display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap;">`;
+            html += `<div style="background: #e6fffa; padding: 15px; border-radius: 6px; border-left: 4px solid #38b2ac;">`;
+            html += `<div style="font-weight: bold; color: #285e61;">エピソード数</div>`;
+            html += `<div style="font-size: 20px; color: #38b2ac;">${programData.episodeCount}</div>`;
+            html += `</div>`;
+            html += `<div style="background: #fef5e7; padding: 15px; border-radius: 6px; border-left: 4px solid #f6ad55;">`;
+            html += `<div style="font-weight: bold; color: #c05621;">楽曲数</div>`;
+            html += `<div style="font-size: 20px; color: #f6ad55;">${programData.totalSongs}</div>`;
+            html += `</div>`;
+            html += `<div style="background: #f0f9ff; padding: 15px; border-radius: 6px; border-left: 4px solid #3182ce;">`;
+            html += `<div style="font-weight: bold; color: #2c5282;">告知数</div>`;
+            html += `<div style="font-size: 20px; color: #3182ce;">${programData.totalAnnouncements}</div>`;
+            html += `</div>`;
+            html += `</div>`;
+
+            // エピソード詳細テーブル
+            if (programData.episodes && programData.episodes.length > 0) {
+                html += `<div style="margin-top: 20px;">`;
+                html += `<h5 style="color: #4a5568; margin-bottom: 15px;">📅 エピソード別詳細</h5>`;
+                html += `<div style="overflow-x: auto;">`;
+                html += `<table style="width: 100%; border-collapse: collapse; background: white; border-radius: 6px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">`;
+                html += `<thead style="background: #2d3748; color: white;">`;
+                html += `<tr><th style="padding: 12px; text-align: left;">日付</th><th style="padding: 12px; text-align: left;">曜日</th><th style="padding: 12px; text-align: center;">楽曲数</th><th style="padding: 12px; text-align: center;">告知数</th></tr>`;
+                html += `</thead><tbody>`;
+
+                programData.episodes.forEach((episode, index) => {
+                    const bgColor = index % 2 === 0 ? '#f8f9fa' : 'white';
+                    html += `<tr style="background: ${bgColor};">`;
+                    html += `<td style="padding: 12px; border-bottom: 1px solid #e2e8f0;">${episode.date}</td>`;
+                    html += `<td style="padding: 12px; border-bottom: 1px solid #e2e8f0;">${episode.weekday}</td>`;
+                    html += `<td style="padding: 12px; text-align: center; border-bottom: 1px solid #e2e8f0;">${episode.songsCount}</td>`;
+                    html += `<td style="padding: 12px; text-align: center; border-bottom: 1px solid #e2e8f0;">${episode.announcementsCount}</td>`;
+                    html += `</tr>`;
+                });
+
+                html += `</tbody></table></div></div>`;
+            }
+
+            html += `</div>`;
+            tableDisplay.innerHTML = html;
+        }
+
+        // === 旧関数（削除予定） ===
+        // 統一データ形式を使用した番組表表示関数
+        function displayProgramTable(result, selectedProgram) {
+            const tableDisplay = document.getElementById('table-display');
+
+            // デバッグ情報をコンソールに出力
+            console.log('displayProgramTable called with:', { result, selectedProgram });
+            console.log('result.programSummaries:', result.programSummaries);
+            console.log('Is programSummaries an array?', Array.isArray(result.programSummaries));
+
+            // データの存在と形式をチェック
+            if (!result.programSummaries) {
+                tableDisplay.innerHTML = '<div class="error-data">programSummariesが見つかりません</div>';
+                return;
+            }
+
+            if (!Array.isArray(result.programSummaries)) {
+                tableDisplay.innerHTML = '<div class="error-data">programSummariesが配列ではありません</div>';
+                return;
+            }
+
+            // 指定された番組のデータを検索
+            const targetProgram = result.programSummaries.find(program => program.name === selectedProgram);
+
+            if (!targetProgram) {
+                tableDisplay.innerHTML = `<div class="error-data">番組 "${selectedProgram}" が見つかりませんでした</div>`;
+                return;
+            }
+
+            // テーブル形式で表示
+            let html = `<div style="background: #f8f9fa; padding: 20px; border-radius: 8px;">`;
+            html += `<h4 style="color: #2d3748; margin-bottom: 20px;">${selectedProgram} - 詳細データ</h4>`;
+
+            // サマリー情報
+            html += `<div style="display: flex; gap: 20px; margin-bottom: 20px; flex-wrap: wrap;">`;
+            html += `<div style="background: #e6fffa; padding: 15px; border-radius: 6px; border-left: 4px solid #38b2ac;">`;
+            html += `<div style="font-weight: bold; color: #285e61;">エピソード数</div>`;
+            html += `<div style="font-size: 20px; color: #38b2ac;">${targetProgram.episodeCount}</div>`;
+            html += `</div>`;
+            html += `<div style="background: #fef5e7; padding: 15px; border-radius: 6px; border-left: 4px solid #f6ad55;">`;
+            html += `<div style="font-weight: bold; color: #c05621;">楽曲数</div>`;
+            html += `<div style="font-size: 20px; color: #f6ad55;">${targetProgram.totalSongs}</div>`;
+            html += `</div>`;
+            html += `<div style="background: #f0f9ff; padding: 15px; border-radius: 6px; border-left: 4px solid #3182ce;">`;
+            html += `<div style="font-weight: bold; color: #2c5282;">告知数</div>`;
+            html += `<div style="font-size: 20px; color: #3182ce;">${targetProgram.totalAnnouncements}</div>`;
+            html += `</div>`;
+            html += `</div>`;
+
+            // エピソード詳細テーブル
+            if (targetProgram.episodes && targetProgram.episodes.length > 0) {
+                html += `<div style="margin-top: 20px;">`;
+                html += `<h5 style="color: #4a5568; margin-bottom: 15px;">📅 エピソード別詳細</h5>`;
+                html += `<div style="overflow-x: auto;">`;
+                html += `<table style="width: 100%; border-collapse: collapse; background: white; border-radius: 6px; overflow: hidden; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">`;
+                html += `<thead style="background: #2d3748; color: white;">`;
+                html += `<tr><th style="padding: 12px; text-align: left;">日付</th><th style="padding: 12px; text-align: left;">曜日</th><th style="padding: 12px; text-align: center;">楽曲数</th><th style="padding: 12px; text-align: center;">告知数</th></tr>`;
+                html += `</thead><tbody>`;
+
+                targetProgram.episodes.forEach((episode, index) => {
+                    const bgColor = index % 2 === 0 ? '#f8f9fa' : 'white';
+                    html += `<tr style="background: ${bgColor};">`;
+                    html += `<td style="padding: 12px; border-bottom: 1px solid #e2e8f0;">${episode.date || 'ー'}</td>`;
+                    html += `<td style="padding: 12px; border-bottom: 1px solid #e2e8f0;">${episode.weekday || 'ー'}</td>`;
+                    html += `<td style="padding: 12px; text-align: center; border-bottom: 1px solid #e2e8f0;">${(episode.songs || []).length}</td>`;
+                    html += `<td style="padding: 12px; text-align: center; border-bottom: 1px solid #e2e8f0;">${(episode.announcements || []).length}</td>`;
+                    html += `</tr>`;
+                });
+
+                html += `</tbody></table></div></div>`;
+            }
+
+            html += `</div>`;
+            tableDisplay.innerHTML = html;
         }
 
         // 転置テーブル形式の番組詳細表を読み込み
@@ -2291,9 +2738,9 @@
                     if (result.success) {
                         displayTransposedTable(result);
                     } else {
-                        tableDisplay.innerHTML = `<div class="error-data">エラー: ${result.error}</div>`;
+                        tableDisplay.innerHTML = `<div class="error-data">エラー: ${result && result.error ? result.error : '不明なエラー'}</div>`;
                         // エラーでもデバッグログを表示
-                        if (result.debugLogs) {
+                        if (result && result.debugLogs) {
                             displayDebugLog(result.debugLogs);
                         }
                     }
@@ -2606,6 +3053,407 @@
             document.getElementById('debug-log-content').textContent = '';
             document.getElementById('debug-log-section').style.display = 'none';
             document.getElementById('debug-controls').style.display = 'none';
+        }
+
+        // =============================================================================
+        // データ構造表示・デバッグ関数群
+        // =============================================================================
+
+        // 実データJSON表示関数
+        function showActualDataStructure() {
+            const resultEl = document.getElementById('data-structure-display');
+            const summaryEl = document.getElementById('data-structure-summary');
+
+            resultEl.innerHTML = '<div style="text-align: center; padding: 20px; color: #718096;">🔄 実データ構造を取得中...</div>';
+            summaryEl.innerHTML = '<div style="text-align: center; color: #718096;">📊 データ構造分析中...</div>';
+
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    console.log('=== 実データ構造表示結果 ===');
+                    console.log(result);
+
+                    if (result && result.success) {
+                        // サマリー表示
+                        summaryEl.innerHTML = `
+                            <div style="color: #38a169; margin-bottom: 10px;">✅ 実データ構造取得成功</div>
+                            <div style="display: flex; gap: 20px; flex-wrap: wrap; justify-content: center;">
+                                <div style="background: #f0fff4; padding: 10px; border-radius: 8px; border-left: 4px solid #38a169;">
+                                    <div style="font-weight: bold; color: #2f855a;">生データ番組数</div>
+                                    <div style="font-size: 24px; color: #38a169;">${result.rawDataKeys.length}</div>
+                                </div>
+                                <div style="background: #f0f9ff; padding: 10px; border-radius: 8px; border-left: 4px solid #3182ce;">
+                                    <div style="font-weight: bold; color: #2c5282;">JSON番組数</div>
+                                    <div style="font-size: 24px; color: #3182ce;">${result.jsonProgramCount}</div>
+                                </div>
+                            </div>
+                        `;
+
+                        // 詳細データ表示
+                        let html = '<div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-top: 15px;">';
+                        html += '<h4 style="color: #2d3748; margin-bottom: 15px;">📋 データ構造詳細</h4>';
+
+                        // 生データ番組一覧
+                        html += '<div style="margin-bottom: 20px;">';
+                        html += '<h5 style="color: #4a5568; margin-bottom: 10px;">🔍 検出された番組:</h5>';
+                        html += '<div style="background: #ffffff; padding: 10px; border-radius: 6px; font-family: monospace;">';
+                        result.rawDataKeys.forEach((program, index) => {
+                            html += `<div style="margin-bottom: 5px; color: #2b6cb0;">[${index + 1}] ${program}</div>`;
+                        });
+                        html += '</div>';
+                        html += '</div>';
+
+                        // JSON構造プレビュー（programSummariesを使用）
+                        if (result.programSummaries && Array.isArray(result.programSummaries)) {
+                            html += '<div style="margin-bottom: 20px;">';
+                            html += '<h5 style="color: #4a5568; margin-bottom: 10px;">📊 JSON構造プレビュー:</h5>';
+                            html += '<div style="background: #ffffff; padding: 10px; border-radius: 6px; font-family: monospace; max-height: 300px; overflow-y: auto;">';
+
+                            result.programSummaries.forEach((program, index) => {
+                                html += `<div style="margin-bottom: 10px; padding: 8px; background: #f7fafc; border-radius: 4px;">`;
+                                html += `<div style="font-weight: bold; color: #2d3748;">[${index + 1}] ${program.name}</div>`;
+                                html += `<div style="margin-left: 20px; color: #4a5568;">エピソード数: ${program.episodeCount}</div>`;
+                                html += `<div style="margin-left: 20px; color: #4a5568;">楽曲数: ${program.totalSongs}</div>`;
+                                html += `<div style="margin-left: 20px; color: #4a5568;">告知数: ${program.totalAnnouncements}</div>`;
+                                html += `</div>`;
+                            });
+
+                            html += '</div>';
+                            html += '</div>';
+                        }
+
+                        html += '</div>';
+                        resultEl.innerHTML = html;
+
+                        // コンソールログの表示提案
+                        showLogHint('実データ構造の詳細ログを確認してください（ブラウザの開発者ツール > Console）');
+
+                    } else {
+                        summaryEl.innerHTML = '<div style="color: #e53e3e;">❌ 実データ構造取得失敗</div>';
+                        resultEl.innerHTML = '<div style="color: #e53e3e; padding: 20px;">❌ エラー: ' + (result && result.error ? result.error : '不明なエラー') + '</div>';
+                    }
+                })
+                .withFailureHandler(function(error) {
+                    console.error('実データ構造表示エラー:', error);
+                    summaryEl.innerHTML = '<div style="color: #e53e3e;">❌ 通信エラー</div>';
+                    resultEl.innerHTML = '<div style="color: #e53e3e; padding: 20px;">❌ 通信エラー: ' + error.message + '</div>';
+                })
+                .displayActualDataStructure('thisWeek');
+        }
+
+        // 処理ステップ表示関数
+        function showProcessingSteps() {
+            const resultEl = document.getElementById('processing-steps-display');
+            const summaryEl = document.getElementById('processing-steps-summary');
+
+            resultEl.innerHTML = '<div style="text-align: center; padding: 20px; color: #718096;">🔄 処理ステップを分析中...</div>';
+            summaryEl.innerHTML = '<div style="text-align: center; color: #718096;">⚙️ データ処理ステップ実行中...</div>';
+
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    console.log('=== 処理ステップ表示結果 ===');
+                    console.log(result);
+
+                    if (result && result.success) {
+                        // サマリー表示
+                        summaryEl.innerHTML = `
+                            <div style="color: #38a169; margin-bottom: 10px;">✅ 処理ステップ分析完了</div>
+                            <div style="display: flex; gap: 20px; flex-wrap: wrap; justify-content: center;">
+                                <div style="background: #f0fff4; padding: 10px; border-radius: 8px; border-left: 4px solid #38a169;">
+                                    <div style="font-weight: bold; color: #2f855a;">処理ステップ数</div>
+                                    <div style="font-size: 24px; color: #38a169;">${result.steps.length}</div>
+                                </div>
+                                <div style="background: #fffaf0; padding: 10px; border-radius: 8px; border-left: 4px solid #f6ad55;">
+                                    <div style="font-weight: bold; color: #c05621;">処理時間</div>
+                                    <div style="font-size: 24px; color: #f6ad55;">${result.processingTime}ms</div>
+                                </div>
+                            </div>
+                        `;
+
+                        // 処理ステップ詳細
+                        let html = '<div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-top: 15px;">';
+                        html += '<h4 style="color: #2d3748; margin-bottom: 15px;">⚙️ 処理ステップ詳細</h4>';
+
+                        result.steps.forEach((step, index) => {
+                            const isSuccess = step.status === 'success';
+                            const isError = step.status === 'error';
+                            const bgColor = isSuccess ? '#f0fff4' : isError ? '#fed7d7' : '#f7fafc';
+                            const borderColor = isSuccess ? '#38a169' : isError ? '#e53e3e' : '#a0aec0';
+                            const icon = isSuccess ? '✅' : isError ? '❌' : '🔄';
+
+                            html += `<div style="background: ${bgColor}; padding: 12px; margin-bottom: 10px; border-radius: 6px; border-left: 4px solid ${borderColor};">`;
+                            html += `<div style="font-weight: bold; color: #2d3748; margin-bottom: 8px;">${icon} ステップ ${step.step}: ${step.description || 'Processing'}</div>`;
+
+                            if (step.result) {
+                                html += '<div style="font-family: monospace; background: #ffffff; padding: 8px; border-radius: 4px; margin-top: 8px;">';
+                                html += '<div style="color: #4a5568; font-size: 12px; margin-bottom: 4px;">結果:</div>';
+                                html += `<div style="color: #2d3748;">${JSON.stringify(step.result, null, 2)}</div>`;
+                                html += '</div>';
+                            }
+
+                            if (step.error) {
+                                html += `<div style="color: #e53e3e; font-family: monospace; background: #ffffff; padding: 8px; border-radius: 4px; margin-top: 8px;">エラー: ${step.error}</div>`;
+                            }
+
+                            if (step.timestamp) {
+                                html += `<div style="color: #718096; font-size: 11px; margin-top: 8px;">⏱️ ${step.timestamp.toLocaleString()}</div>`;
+                            }
+
+                            html += '</div>';
+                        });
+
+                        html += '</div>';
+                        resultEl.innerHTML = html;
+
+                        // コンソールログの表示提案
+                        showLogHint('詳細な処理ログを確認してください（ブラウザの開発者ツール > Console）');
+
+                    } else {
+                        summaryEl.innerHTML = '<div style="color: #e53e3e;">❌ 処理ステップ分析失敗</div>';
+                        resultEl.innerHTML = '<div style="color: #e53e3e; padding: 20px;">❌ エラー: ' + (result && result.error ? result.error : '不明なエラー') + '</div>';
+                    }
+                })
+                .withFailureHandler(function(error) {
+                    console.error('処理ステップ表示エラー:', error);
+                    summaryEl.innerHTML = '<div style="color: #e53e3e;">❌ 通信エラー</div>';
+                    resultEl.innerHTML = '<div style="color: #e53e3e; padding: 20px;">❌ 通信エラー: ' + error.message + '</div>';
+                })
+                .debugDataProcessingSteps('thisWeek');
+        }
+
+        // ログヒント表示
+        function showLogHint(message) {
+            const hintEl = document.getElementById('console-log-hint');
+            if (hintEl) {
+                hintEl.innerHTML = `
+                    <div style="background: #e6fffa; border: 1px solid #38b2ac; border-radius: 6px; padding: 12px; margin: 15px 0; color: #234e52;">
+                        <div style="font-weight: bold; margin-bottom: 5px;">💡 開発者向けヒント</div>
+                        <div>${message}</div>
+                        <div style="margin-top: 8px; font-size: 12px; color: #4a5568;">
+                            <strong>手順:</strong> F12キー → Console タブ → ログを確認
+                        </div>
+                    </div>
+                `;
+            }
+        }
+
+        // データ構造クリア関数
+        function clearDataStructureDisplay() {
+            document.getElementById('data-structure-display').innerHTML = '<div class="empty-data">データ構造表示をクリアしました</div>';
+            document.getElementById('data-structure-summary').innerHTML = '';
+            document.getElementById('processing-steps-display').innerHTML = '<div class="empty-data">処理ステップ表示をクリアしました</div>';
+            document.getElementById('processing-steps-summary').innerHTML = '';
+            const hintEl = document.getElementById('console-log-hint');
+            if (hintEl) hintEl.innerHTML = '';
+        }
+
+        // =============================================================================
+        // 統一API テスト関数群
+        // =============================================================================
+
+        // シート一覧表示関数
+        function showAvailableSheets() {
+            var resultEl = document.getElementById('api-test-results');
+            resultEl.innerHTML = '<div style="text-align: center; padding: 20px; color: #718096;">🔄 シート一覧取得中...</div>';
+
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    console.log('シート一覧結果:', result);
+
+                    if (result && result.success) {
+                        var html = '<div style="color: #38a169; margin-bottom: 15px;">✅ シート一覧取得成功</div>';
+                        html += '<div style="margin-bottom: 10px;"><strong>シート数:</strong> ' + result.totalSheets + '</div>';
+                        html += '<div style="margin-bottom: 15px;"><strong>利用可能なシート:</strong></div>';
+                        html += '<div style="background: #f7fafc; padding: 15px; border-radius: 8px; font-family: monospace; max-height: 300px; overflow-y: auto;">';
+
+                        result.sheets.forEach(function(sheetName, index) {
+                            var isWeekSheet = /^\d{2}\.\d{1,2}\.\d{1,2}-\d{1,2}\.\d{1,2}$/.test(sheetName);
+                            var styleClass = isWeekSheet ? 'color: #2b6cb0; font-weight: bold;' : 'color: #4a5568;';
+                            html += '<div style="' + styleClass + ' margin-bottom: 5px;">' + (index + 1) + '. ' + sheetName + (isWeekSheet ? ' 📅' : '') + '</div>';
+                        });
+
+                        html += '</div>';
+                        resultEl.innerHTML = html;
+                    } else {
+                        resultEl.innerHTML = '<div style="color: #e53e3e; padding: 20px;">❌ シート一覧取得失敗: ' + (result && result.error ? result.error : '不明なエラー') + '</div>';
+                    }
+                })
+                .withFailureHandler(function(error) {
+                    console.error('シート一覧取得エラー:', error);
+                    resultEl.innerHTML = '<div style="color: #e53e3e; padding: 20px;">❌ シート一覧取得エラー: ' + (error.message || error.toString()) + '</div>';
+                })
+                .getAvailableSheets();
+        }
+
+        // 接続テスト関数
+        function testConnectionFunction() {
+            var resultEl = document.getElementById('api-test-results');
+            resultEl.innerHTML = '<div style="text-align: center; padding: 20px; color: #718096;">🔄 接続テスト中...</div>';
+
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    console.log('接続テスト結果:', result);
+                    if (result && result.success) {
+                        resultEl.innerHTML = '<div style="color: #38a169; padding: 20px;">✅ 接続成功: ' + result.message + '<br><small>タイムスタンプ: ' + result.timestamp + '</small></div>';
+                    } else {
+                        resultEl.innerHTML = '<div style="color: #e53e3e; padding: 20px;">❌ 接続テスト失敗</div>';
+                    }
+                })
+                .withFailureHandler(function(error) {
+                    console.error('接続テストエラー:', error);
+                    resultEl.innerHTML = '<div style="color: #e53e3e; padding: 20px;">❌ 接続エラー: ' + (error.message || error.toString()) + '</div>';
+                })
+                .testConnection();
+        }
+
+        // 統一API テスト実行
+        function runUnifiedAPITest() {
+            var weekType = document.getElementById('api-week-select').value;
+            var outputFormat = document.getElementById('api-output-format').value;
+            var resultEl = document.getElementById('api-test-results');
+            
+            resultEl.innerHTML = '<div style="text-align: center; padding: 20px; color: #718096;">🔄 テスト実行中...</div>';
+            
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    try {
+                        console.log('=== API テスト結果 詳細ログ ===');
+                        console.log('結果受信:', result);
+                        console.log('結果の型:', typeof result);
+                        console.log('結果がnull:', result === null);
+                        console.log('結果がundefined:', result === undefined);
+                        console.log('結果の内容:', JSON.stringify(result, null, 2));
+
+                        if (result && typeof result === 'object') {
+                            console.log('オブジェクトのキー:', Object.keys(result));
+                            console.log('success プロパティ:', result.success);
+                            console.log('error プロパティ:', result.error);
+                            console.log('data プロパティ:', result.data);
+                        }
+                        console.log('=== ログ終了 ===');
+
+                        displayAPITestResults(result, weekType, outputFormat);
+                    } catch (err) {
+                        console.error('結果表示エラー:', err);
+                        resultEl.innerHTML = '<div style="color: #e53e3e; padding: 20px;">❌ 結果表示エラー: ' + err.message + '</div>';
+                    }
+                })
+                .withFailureHandler(function(error) {
+                    console.error('API テストエラー:', error);
+                    var errorDetails = '';
+                    if (error && typeof error === 'object') {
+                        errorDetails = '<br><small>詳細: ' + JSON.stringify(error, null, 2) + '</small>';
+                    }
+                    resultEl.innerHTML = '<div style="color: #e53e3e; padding: 20px;">❌ API呼び出しエラー: ' + (error.message || error.toString()) + errorDetails + '</div>';
+                })
+                .getAppData(undefined, weekType, outputFormat);
+        }
+
+        // API テスト結果表示
+        function displayAPITestResults(result, weekType, outputFormat) {
+            var resultEl = document.getElementById('api-test-results');
+            
+            // result が null または undefined の場合の処理
+            if (!result) {
+                resultEl.innerHTML = '<div style="color: #e53e3e; padding: 20px;">❌ テスト失敗: 結果データを取得できませんでした<br><small>デバッグ: result = ' + JSON.stringify(result) + '</small></div>';
+                return;
+            }
+            
+            try {
+                if (result.success) {
+                    var html = '<div style="color: #38a169; margin-bottom: 15px;">✅ 統一API テスト成功</div>';
+                    html += '<div style="margin-bottom: 10px;"><strong>対象週:</strong> ' + (weekType === 'thisWeek' ? '今週' : '来週') + '</div>';
+                    html += '<div style="margin-bottom: 10px;"><strong>出力形式:</strong> ' + outputFormat + '</div>';
+                    
+                    if (result.debug) {
+                        html += '<div style="margin-bottom: 10px;"><strong>番組数:</strong> ' + (result.debug.programCount || 0) + '</div>';
+                        html += '<div style="margin-bottom: 10px;"><strong>シート名:</strong> ' + (result.debug.sheetName || 'N/A') + '</div>';
+                    }
+                    
+                    html += '<div style="margin-top: 15px;"><button onclick="showJSONData(\'' + outputFormat + '\')" class="btn" style="background: #4299e1; color: white;">📋 データを表示</button></div>';
+                    
+                    // データを一時保存
+                    window.currentAPIData = result.data;
+                    window.currentOutputFormat = outputFormat;
+                    
+                    resultEl.innerHTML = html;
+                } else {
+                    resultEl.innerHTML = '<div style="color: #e53e3e; padding: 20px;">❌ テスト失敗: ' + (result && result.error ? result.error : '不明なエラー') + '</div>';
+                }
+            } catch (err) {
+                console.error('結果表示処理エラー:', err);
+                resultEl.innerHTML = '<div style="color: #e53e3e; padding: 20px;">❌ 結果表示処理エラー: ' + err.message + '</div>';
+            }
+        }
+
+        // JSON データ表示
+        function showJSONData(outputFormat) {
+            if (!window.currentAPIData) {
+                alert('表示するデータがありません');
+                return;
+            }
+            
+            var modal = document.createElement('div');
+            modal.style.cssText = 'position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 10000; display: flex; align-items: center; justify-content: center;';
+            
+            var content = document.createElement('div');
+            content.style.cssText = 'background: white; width: 90%; max-width: 800px; height: 80%; border-radius: 10px; padding: 20px; overflow: hidden; display: flex; flex-direction: column;';
+            
+            var header = document.createElement('div');
+            header.style.cssText = 'display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; border-bottom: 1px solid #e2e8f0; padding-bottom: 10px;';
+            header.innerHTML = '<h3 style="margin: 0;">📋 ' + outputFormat.toUpperCase() + ' データ</h3><button onclick="this.parentElement.parentElement.parentElement.remove()" style="background: #e53e3e; color: white; border: none; border-radius: 5px; padding: 5px 10px; cursor: pointer;">✕</button>';
+            
+            var dataArea = document.createElement('pre');
+            dataArea.style.cssText = 'flex: 1; background: #1a202c; color: #e2e8f0; padding: 15px; border-radius: 5px; overflow: auto; font-size: 0.85rem; margin: 0;';
+            dataArea.textContent = JSON.stringify(window.currentAPIData, null, 2);
+            
+            content.appendChild(header);
+            content.appendChild(dataArea);
+            modal.appendChild(content);
+            document.body.appendChild(modal);
+        }
+
+        // WEB表示適合性チェック
+        function validateWebDisplayCompatibility() {
+            var resultEl = document.getElementById('validation-results');
+            var summaryEl = document.getElementById('validation-summary');
+            var detailsEl = document.getElementById('validation-details');
+            
+            resultEl.style.display = 'block';
+            summaryEl.innerHTML = '<div style="text-align: center; color: #718096;">🔄 WEB表示適合性をチェック中...</div>';
+            detailsEl.textContent = '';
+            
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    summaryEl.innerHTML = '<div style="color: #38a169;">✅ WEB表示適合性チェック完了</div>';
+                    detailsEl.textContent = result || 'チェック結果が取得できませんでした';
+                })
+                .withFailureHandler(function(error) {
+                    summaryEl.innerHTML = '<div style="color: #e53e3e;">❌ チェック中にエラーが発生しました</div>';
+                    detailsEl.textContent = 'エラー詳細: ' + error.message;
+                })
+                .webAppValidateWebDisplayCompatibility();
+        }
+
+        // ドキュメント構造検証
+        function validateDocumentStructure() {
+            var resultEl = document.getElementById('validation-results');
+            var summaryEl = document.getElementById('validation-summary');
+            var detailsEl = document.getElementById('validation-details');
+            
+            resultEl.style.display = 'block';
+            summaryEl.innerHTML = '<div style="text-align: center; color: #718096;">🔄 ドキュメント構造を検証中...</div>';
+            detailsEl.textContent = '';
+            
+            google.script.run
+                .withSuccessHandler(function(result) {
+                    summaryEl.innerHTML = '<div style="color: #38a169;">✅ ドキュメント構造検証完了</div>';
+                    detailsEl.textContent = result || '検証結果が取得できませんでした';
+                })
+                .withFailureHandler(function(error) {
+                    summaryEl.innerHTML = '<div style="color: #e53e3e;">❌ 検証中にエラーが発生しました</div>';
+                    detailsEl.textContent = 'エラー詳細: ' + error.message;
+                })
+                .webAppValidateDocumentGenerationStructure();
         }
     </script>
 </body>
