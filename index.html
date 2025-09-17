@@ -2400,11 +2400,11 @@
 
             tableDisplay.innerHTML = '<div class="loading-data">番組データを読み込み中...</div>';
 
-            // APIテストタブで検証済みの関数を直接使用
+            // generateTransposeTable関数を使用して番組別詳細表を生成
             google.script.run
                 .withSuccessHandler(function(result) {
                     if (result && result.success) {
-                        displayApiTestedProgramTable(result, selectedProgram);
+                        displayTransposedTable(result);
                     } else {
                         tableDisplay.innerHTML = '<div class="error-data">データ取得失敗: ' + (result && result.error ? result.error : '不明なエラー') + '</div>';
                     }
@@ -2412,7 +2412,7 @@
                 .withFailureHandler(function(error) {
                     tableDisplay.innerHTML = '<div class="error-data">通信エラー: ' + error.message + '</div>';
                 })
-                .getFormattedProgramData(selectedWeek);
+                .generateTransposeTable(selectedProgram, selectedWeek);
         }
 
         // APIテストタブで検証済みのデータ構造を使用した番組表表示関数
@@ -3102,18 +3102,20 @@
                         html += '</div>';
                         html += '</div>';
 
-                        // 完全なJSON表示（新機能）
-                        if (result.fullJsonData) {
+                        // ProgramData構造化JSON表示（PROGRAM_STRUCTURE_KEYS使用版）
+                        console.log('Debug: programDataJson availability:', !!result.programDataJson);
+                        if (result.programDataJson) {
+                            console.log('Debug: programDataJson structure:', Object.keys(result.programDataJson));
                             html += '<div style="margin-bottom: 20px;">';
-                            html += '<h5 style="color: #4a5568; margin-bottom: 10px;">📄 完全なJSON情報:</h5>';
+                            html += '<h5 style="color: #4a5568; margin-bottom: 10px;">📄 ProgramData構造化JSON:</h5>';
                             html += '<div style="background: #ffffff; padding: 15px; border-radius: 6px; border: 1px solid #e2e8f0;">';
 
                             // JSONをコピーできるボタンを追加
-                            const jsonString = JSON.stringify(result.fullJsonData, null, 2);
+                            const jsonString = JSON.stringify(result.programDataJson, null, 2);
                             html += `<div style="margin-bottom: 10px; display: flex; gap: 10px; align-items: center;">`;
-                            html += `<button onclick="copyJsonToClipboard('${btoa(jsonString)}')" style="background: #3182ce; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">📋 JSONをコピー</button>`;
-                            html += `<button onclick="downloadJsonFile('${btoa(jsonString)}', 'program_data_${result.weekType}.json')" style="background: #38a169; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">💾 JSONダウンロード</button>`;
-                            html += `<span style="color: #718096; font-size: 0.9rem;">※ 全番組の詳細データが含まれています</span>`;
+                            html += `<button onclick="copyJsonToClipboard('${safeBase64Encode(jsonString)}')" style="background: #3182ce; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">📋 JSONをコピー</button>`;
+                            html += `<button onclick="downloadJsonFile('${safeBase64Encode(jsonString)}', 'program_data_${result.weekType}.json')" style="background: #38a169; color: white; border: none; padding: 5px 10px; border-radius: 4px; cursor: pointer;">💾 JSONダウンロード</button>`;
+                            html += `<span style="color: #718096; font-size: 0.9rem;">※ PROGRAM_STRUCTURE_KEYSに基づく構造化データ</span>`;
                             html += `</div>`;
 
                             // JSON表示エリア
@@ -3122,7 +3124,37 @@
                             html += '</div>';
                             html += '</div>';
                             html += '</div>';
+                        } else {
+                            // フォールバック: 詳細デバッグ情報と元データ表示
+                            html += '<div style="margin-bottom: 20px;">';
+                            html += '<h5 style="color: #e53e3e; margin-bottom: 10px;">⚠️ ProgramDataJSON生成失敗 - デバッグ情報:</h5>';
+
+                            // 中間データ (formattedData) の表示
+                            if (result.data) {
+                                html += '<div style="background: #fffbeb; padding: 15px; border-radius: 6px; border: 1px solid #fed7aa; margin-bottom: 10px;">';
+                                html += '<h6 style="color: #92400e; margin: 0 0 10px 0;">🔍 中間データ (formattedData):</h6>';
+
+                                if (typeof result.data === 'object' && result.data !== null) {
+                                    const dataKeys = Object.keys(result.data);
+                                    html += `<div style="color: #92400e; margin-bottom: 5px;">検出されたキー: ${dataKeys.length}個</div>`;
+                                    dataKeys.forEach((key, index) => {
+                                        html += `<div style="margin-left: 10px; color: #b45309;">[${index + 1}] ${key}</div>`;
+                                        if (result.data[key] && typeof result.data[key] === 'object') {
+                                            const subKeys = Object.keys(result.data[key]);
+                                            html += `<div style="margin-left: 20px; font-size: 12px; color: #a16207;">サブキー: ${subKeys.join(', ')}</div>`;
+                                        }
+                                    });
+                                } else {
+                                    html += `<div style="color: #c2410c;">データ型: ${typeof result.data}</div>`;
+                                }
+                                html += '</div>';
+                            }
+
+                            // 統一エンジンデータ表示機能を削除
+                            html += '<div style="color: #c53030;">エラー: 番組データの生成に失敗しました</div>';
+                            html += '</div>';
                         }
+
 
                         // JSON構造プレビュー（番組サマリー）
                         if (result.programSummaries && Array.isArray(result.programSummaries)) {
@@ -3176,52 +3208,172 @@
                     console.log(result);
 
                     if (result && result.success) {
-                        // サマリー表示
+                        // サマリー表示（強化版）
+                        const efficiency = result.processingEfficiency || 100;
+                        const totalTransformations = result.arrayProcessingSummary?.arrayTransformations?.totalTransformations || 0;
+
                         summaryEl.innerHTML = `
-                            <div style="color: #38a169; margin-bottom: 10px;">✅ 処理ステップ分析完了</div>
-                            <div style="display: flex; gap: 20px; flex-wrap: wrap; justify-content: center;">
-                                <div style="background: #f0fff4; padding: 10px; border-radius: 8px; border-left: 4px solid #38a169;">
-                                    <div style="font-weight: bold; color: #2f855a;">処理ステップ数</div>
-                                    <div style="font-size: 24px; color: #38a169;">${result.steps.length}</div>
+                            <div style="color: #38a169; margin-bottom: 15px; font-weight: bold;">✅ 処理ステップ分析完了 (効率: ${efficiency}%)</div>
+                            <div style="display: flex; gap: 15px; flex-wrap: wrap; justify-content: center; margin-bottom: 15px;">
+                                <div style="background: #f0fff4; padding: 12px; border-radius: 8px; border-left: 4px solid #38a169; min-width: 120px;">
+                                    <div style="font-weight: bold; color: #2f855a;">処理ステップ</div>
+                                    <div style="font-size: 22px; color: #38a169;">${result.totalSteps}</div>
+                                    <div style="font-size: 12px; color: #68d391;">完了: ${result.completedSteps}</div>
                                 </div>
-                                <div style="background: #fffaf0; padding: 10px; border-radius: 8px; border-left: 4px solid #f6ad55;">
-                                    <div style="font-weight: bold; color: #c05621;">処理時間</div>
-                                    <div style="font-size: 24px; color: #f6ad55;">${result.processingTime}ms</div>
+                                <div style="background: #fffaf0; padding: 12px; border-radius: 8px; border-left: 4px solid #f6ad55; min-width: 120px;">
+                                    <div style="font-weight: bold; color: #c05621;">配列変換</div>
+                                    <div style="font-size: 22px; color: #f6ad55;">${totalTransformations}</div>
+                                    <div style="font-size: 12px; color: #fbb040;">処理件数</div>
+                                </div>
+                                <div style="background: #f0f4ff; padding: 12px; border-radius: 8px; border-left: 4px solid #4299e1; min-width: 120px;">
+                                    <div style="font-weight: bold; color: #2b6cb0;">エンジン</div>
+                                    <div style="font-size: 18px; color: #4299e1;">統一</div>
+                                    <div style="font-size: 12px; color: #63b3ed;">${result.performanceImprovement}</div>
                                 </div>
                             </div>
+                            ${result.errorSteps > 0 ? `<div style="background: #fed7d7; padding: 8px; border-radius: 6px; color: #c53030; text-align: center;">⚠️ ${result.errorSteps}個のエラーが検出されました</div>` : ''}
                         `;
 
-                        // 処理ステップ詳細
+                        // 詳細サマリー表示（新機能）
+                        if (result.detailedSummary) {
+                            summaryEl.innerHTML += `
+                                <div style="background: #ffffff; padding: 15px; border-radius: 8px; margin-top: 15px; border: 1px solid #e2e8f0;">
+                                    <h4 style="color: #2d3748; margin-bottom: 12px; font-size: 16px;">📋 詳細サマリー</h4>
+
+                                    <!-- 実行サマリー -->
+                                    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; margin-bottom: 15px;">
+                                        <div style="background: #f0fff4; padding: 10px; border-radius: 6px; border: 1px solid #9ae6b4;">
+                                            <div style="font-size: 12px; color: #2f855a; font-weight: bold; margin-bottom: 4px;">実行モード</div>
+                                            <div style="color: #38a169;">${result.detailedSummary.executionSummary.executionMode}</div>
+                                        </div>
+                                        <div style="background: #fffaf0; padding: 10px; border-radius: 6px; border: 1px solid #f6e05e;">
+                                            <div style="font-size: 12px; color: #c05621; font-weight: bold; margin-bottom: 4px;">処理時間</div>
+                                            <div style="color: #f6ad55;">${result.detailedSummary.executionSummary.totalProcessingTime}ms</div>
+                                        </div>
+                                        <div style="background: #f0f4ff; padding: 10px; border-radius: 6px; border: 1px solid #a3bffa;">
+                                            <div style="font-size: 12px; color: #2b6cb0; font-weight: bold; margin-bottom: 4px;">効率</div>
+                                            <div style="color: #4299e1;">${result.detailedSummary.executionSummary.efficiency}%</div>
+                                        </div>
+                                    </div>
+
+                                    <!-- データ処理サマリー -->
+                                    <div style="background: #f8f9fa; padding: 12px; border-radius: 6px; margin-bottom: 15px;">
+                                        <div style="font-weight: bold; color: #2d3748; margin-bottom: 8px;">📊 データ処理統計</div>
+                                        <div style="display: flex; gap: 15px; flex-wrap: wrap;">
+                                            <span style="color: #4a5568;">入力ソース: <strong>${result.detailedSummary.dataProcessingSummary.inputSource}</strong></span>
+                                            <span style="color: #4a5568;">変換: <strong>${result.detailedSummary.dataProcessingSummary.transformationsPerfomed}</strong>件</span>
+                                            <span style="color: #4a5568;">整合性: <strong style="color: ${result.detailedSummary.dataProcessingSummary.dataIntegrity === 'validated' ? '#38a169' : '#e53e3e'}">${result.detailedSummary.dataProcessingSummary.dataIntegrity}</strong></span>
+                                        </div>
+                                        <div style="margin-top: 8px; font-size: 12px; color: #4a5568;">
+                                            正規化要素: 日付 ${result.detailedSummary.dataProcessingSummary.normalizedElements.dateFields},
+                                            オブジェクト ${result.detailedSummary.dataProcessingSummary.normalizedElements.objectFields},
+                                            日付セル ${result.detailedSummary.dataProcessingSummary.normalizedElements.totalDateCells}
+                                        </div>
+                                    </div>
+
+                                    <!-- システムヘルスチェック -->
+                                    <div style="background: ${result.detailedSummary.systemHealthCheck.dataFlowIntegrity === 'intact' ? '#f0fff4' : '#fed7d7'}; padding: 12px; border-radius: 6px; margin-bottom: 15px;">
+                                        <div style="font-weight: bold; color: #2d3748; margin-bottom: 8px;">🔧 システム状態</div>
+                                        <div style="display: flex; gap: 15px; flex-wrap: wrap; margin-bottom: 8px;">
+                                            <span style="color: #4a5568;">キャッシュ: <strong style="color: #38a169">${result.detailedSummary.systemHealthCheck.cacheSystem}</strong></span>
+                                            <span style="color: #4a5568;">エンジン: <strong style="color: #38a169">${result.detailedSummary.systemHealthCheck.unifiedEngine}</strong></span>
+                                            <span style="color: #4a5568;">エラー率: <strong>${result.detailedSummary.systemHealthCheck.errorRate}%</strong></span>
+                                        </div>
+                                        <div style="color: ${result.detailedSummary.systemHealthCheck.dataFlowIntegrity === 'intact' ? '#38a169' : '#e53e3e'}; font-weight: bold;">
+                                            ${result.detailedSummary.systemHealthCheck.recommendedAction}
+                                        </div>
+                                    </div>
+
+                                    <!-- トラブルシューティング情報 -->
+                                    ${result.detailedSummary.troubleshootingInfo.debugRecommendations.length > 0 ? `
+                                        <div style="background: #f7fafc; padding: 12px; border-radius: 6px;">
+                                            <div style="font-weight: bold; color: #2d3748; margin-bottom: 8px;">🔍 推奨アクション</div>
+                                            <ul style="margin: 0; padding-left: 20px; color: #4a5568; font-size: 14px;">
+                                                ${result.detailedSummary.troubleshootingInfo.debugRecommendations.map(rec => `<li style="margin-bottom: 4px;">${rec}</li>`).join('')}
+                                            </ul>
+                                        </div>
+                                    ` : ''}
+                                </div>
+                            `;
+                        }
+
+                        // 処理ステップ詳細（配列処理特化版）
                         let html = '<div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin-top: 15px;">';
                         html += '<h4 style="color: #2d3748; margin-bottom: 15px;">⚙️ 処理ステップ詳細</h4>';
 
-                        result.steps.forEach((step, index) => {
-                            const isSuccess = step.status === 'success';
+                        result.stepsSummary.forEach((step, index) => {
+                            const isCompleted = step.status === 'completed';
                             const isError = step.status === 'error';
-                            const bgColor = isSuccess ? '#f0fff4' : isError ? '#fed7d7' : '#f7fafc';
-                            const borderColor = isSuccess ? '#38a169' : isError ? '#e53e3e' : '#a0aec0';
-                            const icon = isSuccess ? '✅' : isError ? '❌' : '🔄';
+                            const bgColor = isCompleted ? '#f0fff4' : isError ? '#fed7d7' : '#f7fafc';
+                            const borderColor = isCompleted ? '#38a169' : isError ? '#e53e3e' : '#a0aec0';
+                            const icon = isCompleted ? '✅' : isError ? '❌' : '🔄';
 
                             html += `<div style="background: ${bgColor}; padding: 12px; margin-bottom: 10px; border-radius: 6px; border-left: 4px solid ${borderColor};">`;
-                            html += `<div style="font-weight: bold; color: #2d3748; margin-bottom: 8px;">${icon} ステップ ${step.step}: ${step.description || 'Processing'}</div>`;
+                            html += `<div style="font-weight: bold; color: #2d3748; margin-bottom: 8px;">${icon} ステップ ${step.step}: ${step.name || step.description || 'Processing'}</div>`;
 
-                            if (step.result) {
-                                html += '<div style="font-family: monospace; background: #ffffff; padding: 8px; border-radius: 4px; margin-top: 8px;">';
-                                html += '<div style="color: #4a5568; font-size: 12px; margin-bottom: 4px;">結果:</div>';
-                                html += `<div style="color: #2d3748;">${JSON.stringify(step.result, null, 2)}</div>`;
+                            // 配列処理の特別表示
+                            if (step.result && step.result.arrayProcessing) {
+                                html += '<div style="background: #ffffff; padding: 10px; border-radius: 4px; margin-top: 8px; border: 1px solid #e2e8f0;">';
+                                html += '<div style="font-weight: bold; color: #553c9a; margin-bottom: 6px;">📊 配列変換詳細:</div>';
+
+                                const arrayProc = step.result.arrayProcessing;
+                                html += `<div style="display: flex; gap: 15px; margin-bottom: 8px;">`;
+                                html += `<div style="background: #f7fafc; padding: 6px 8px; border-radius: 4px; font-size: 12px;">`;
+                                html += `<strong>Before:</strong> ${arrayProc.before.rows}行 × ${Math.round(arrayProc.before.totalCells/arrayProc.before.rows || 0)}列</div>`;
+                                html += `<div style="background: #f0fff4; padding: 6px 8px; border-radius: 4px; font-size: 12px;">`;
+                                html += `<strong>After:</strong> ${arrayProc.after.rows}行 × ${Math.round(arrayProc.after.totalCells/arrayProc.after.rows || 0)}列</div>`;
+                                html += `<div style="background: #fffaf0; padding: 6px 8px; border-radius: 4px; font-size: 12px;">`;
+                                html += `<strong>変換:</strong> ${step.result.transformationCount || 0}件</div>`;
+                                html += `</div>`;
+
+                                // サンプルデータ表示
+                                if (arrayProc.transformations && arrayProc.transformations.length > 0) {
+                                    html += '<div style="margin-top: 8px;">';
+                                    html += '<div style="font-size: 12px; color: #4a5568; margin-bottom: 4px;">変換例 (最初の3件):</div>';
+                                    arrayProc.transformations.slice(0, 3).forEach(trans => {
+                                        html += `<div style="font-family: monospace; font-size: 11px; color: #2d3748; background: #f8f9fa; padding: 4px 6px; border-radius: 3px; margin-bottom: 2px;">`;
+                                        html += `${trans.position} [${trans.type}]: "${trans.before}" → "${trans.after}"</div>`;
+                                    });
+                                    html += '</div>';
+                                }
                                 html += '</div>';
                             }
 
+                            // 通常の結果表示
+                            if (step.result && !step.result.arrayProcessing) {
+                                html += '<div style="font-family: monospace; background: #ffffff; padding: 8px; border-radius: 4px; margin-top: 8px; border: 1px solid #e2e8f0; max-height: 200px; overflow-y: auto;">';
+                                html += '<div style="color: #4a5568; font-size: 12px; margin-bottom: 4px;">結果:</div>';
+                                html += `<pre style="margin: 0; white-space: pre-wrap; font-size: 11px; color: #2d3748;">${JSON.stringify(step.result, null, 2)}</pre>`;
+                                html += '</div>';
+                            }
+
+                            // エラー表示（強化版）
                             if (step.error) {
-                                html += `<div style="color: #e53e3e; font-family: monospace; background: #ffffff; padding: 8px; border-radius: 4px; margin-top: 8px;">エラー: ${step.error}</div>`;
+                                html += `<div style="color: #e53e3e; font-family: monospace; background: #fed7d7; padding: 8px; border-radius: 4px; margin-top: 8px; border: 1px solid #feb2b2;">`;
+                                html += `<div style="font-weight: bold; margin-bottom: 4px;">❌ エラー詳細:</div>`;
+                                html += `<div>${step.error}</div>`;
+                                html += `</div>`;
                             }
 
                             if (step.timestamp) {
-                                html += `<div style="color: #718096; font-size: 11px; margin-top: 8px;">⏱️ ${step.timestamp.toLocaleString()}</div>`;
+                                html += `<div style="color: #718096; font-size: 11px; margin-top: 8px; text-align: right;">⏱️ ${new Date(step.timestamp).toLocaleString()}</div>`;
                             }
 
                             html += '</div>';
                         });
+
+                        // 配列処理サマリーの追加表示
+                        if (result.arrayProcessingSummary) {
+                            html += '<div style="background: #e6fffa; padding: 12px; border-radius: 6px; margin-top: 15px; border: 1px solid #38b2ac;">';
+                            html += '<h5 style="color: #234e52; margin-bottom: 10px;">📋 配列処理サマリー</h5>';
+                            const summary = result.arrayProcessingSummary.arrayTransformations;
+                            html += `<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px;">`;
+                            html += `<div style="text-align: center;"><strong>${summary.totalTransformations}</strong><br><span style="font-size: 12px;">総変換数</span></div>`;
+                            html += `<div style="text-align: center;"><strong>${summary.dateNormalizations}</strong><br><span style="font-size: 12px;">日付正規化</span></div>`;
+                            html += `<div style="text-align: center;"><strong>${summary.objectFixes}</strong><br><span style="font-size: 12px;">オブジェクト修正</span></div>`;
+                            html += `</div>`;
+                            html += '</div>';
+                        }
 
                         html += '</div>';
                         resultEl.innerHTML = html;
@@ -3230,8 +3382,62 @@
                         showLogHint('詳細な処理ログを確認してください（ブラウザの開発者ツール > Console）');
 
                     } else {
-                        summaryEl.innerHTML = '<div style="color: #e53e3e;">❌ 処理ステップ分析失敗</div>';
-                        resultEl.innerHTML = '<div style="color: #e53e3e; padding: 20px;">❌ エラー: ' + (result && result.error ? result.error : '不明なエラー') + '</div>';
+                        // エラー時の詳細表示
+                        summaryEl.innerHTML = '<div style="color: #e53e3e; font-weight: bold;">❌ 処理ステップ分析失敗</div>';
+
+                        let errorHtml = '<div style="background: #fed7d7; padding: 20px; border-radius: 8px; border: 1px solid #feb2b2;">';
+                        errorHtml += '<h4 style="color: #c53030; margin-bottom: 15px;">❌ エラー詳細</h4>';
+
+                        if (result && result.error) {
+                            errorHtml += `<div style="background: #ffffff; padding: 12px; border-radius: 6px; margin-bottom: 12px;">`;
+                            errorHtml += `<div style="font-weight: bold; color: #c53030; margin-bottom: 6px;">エラーメッセージ:</div>`;
+                            errorHtml += `<div style="font-family: monospace; color: #2d3748;">${result.error}</div>`;
+                            errorHtml += `</div>`;
+
+                            // エラー詳細がある場合
+                            if (result.errorDetails) {
+                                errorHtml += `<div style="background: #ffffff; padding: 12px; border-radius: 6px; margin-bottom: 12px;">`;
+                                errorHtml += `<div style="font-weight: bold; color: #c53030; margin-bottom: 6px;">デバッグ情報:</div>`;
+                                errorHtml += `<div style="font-size: 12px;">`;
+                                errorHtml += `<div><strong>完了ステップ:</strong> ${result.debugInfo?.completedSteps || 0} / ${result.debugInfo?.totalSteps || 0}</div>`;
+                                errorHtml += `<div><strong>最後の成功ステップ:</strong> ${result.debugInfo?.lastCompletedStep || 'なし'}</div>`;
+                                errorHtml += `<div><strong>失敗ステップ:</strong> ${result.debugInfo?.failedStep || 'なし'}</div>`;
+                                errorHtml += `</div>`;
+                                errorHtml += `</div>`;
+                            }
+
+                            // 配列エラーの詳細
+                            if (result.arrayErrorContext) {
+                                errorHtml += `<div style="background: #fff5f5; padding: 12px; border-radius: 6px; border: 1px solid #feb2b2;">`;
+                                errorHtml += `<div style="font-weight: bold; color: #c53030; margin-bottom: 6px;">🔍 配列処理エラー分析:</div>`;
+                                errorHtml += `<div style="font-size: 12px; margin-bottom: 8px;">`;
+                                errorHtml += `<strong>疑わしい操作:</strong> ${result.arrayErrorContext.suspectedArrayOperation}`;
+                                errorHtml += `</div>`;
+
+                                if (result.arrayErrorContext.possibleCauses) {
+                                    errorHtml += `<div style="font-size: 12px;"><strong>考えられる原因:</strong></div>`;
+                                    errorHtml += `<ul style="margin: 4px 0 0 20px; font-size: 11px;">`;
+                                    result.arrayErrorContext.possibleCauses.forEach(cause => {
+                                        errorHtml += `<li>${cause}</li>`;
+                                    });
+                                    errorHtml += `</ul>`;
+                                }
+                                errorHtml += `</div>`;
+                            }
+
+                        } else {
+                            errorHtml += `<div style="color: #c53030;">不明なエラーが発生しました</div>`;
+                        }
+
+                        errorHtml += '<div style="margin-top: 15px; padding: 10px; background: #fff5f5; border-radius: 4px; font-size: 12px;">';
+                        errorHtml += '<strong>💡 対処方法:</strong><br>';
+                        errorHtml += '1. ブラウザの開発者ツール（F12）でConsoleタブを確認<br>';
+                        errorHtml += '2. スプレッドシートのデータ形式を確認<br>';
+                        errorHtml += '3. 問題が継続する場合は管理者に連絡';
+                        errorHtml += '</div>';
+
+                        errorHtml += '</div>';
+                        resultEl.innerHTML = errorHtml;
                     }
                 })
                 .withFailureHandler(function(error) {
@@ -3258,10 +3464,47 @@
             }
         }
 
+        // UTF-8対応のBase64エンコード/デコード関数
+        function safeBase64Encode(str) {
+            try {
+                // UTF-8バイト列に変換してからBase64エンコード
+                const encoder = new TextEncoder();
+                const bytes = encoder.encode(str);
+                let binary = '';
+                for (let i = 0; i < bytes.length; i++) {
+                    binary += String.fromCharCode(bytes[i]);
+                }
+                return btoa(binary);
+            } catch (error) {
+                console.error('Base64エンコードエラー:', error);
+                return '';
+            }
+        }
+
+        function safeBase64Decode(base64Str) {
+            try {
+                // Base64デコードしてからUTF-8文字列に変換
+                const binary = atob(base64Str);
+                const bytes = new Uint8Array(binary.length);
+                for (let i = 0; i < binary.length; i++) {
+                    bytes[i] = binary.charCodeAt(i);
+                }
+                const decoder = new TextDecoder();
+                return decoder.decode(bytes);
+            } catch (error) {
+                console.error('Base64デコードエラー:', error);
+                return '';
+            }
+        }
+
         // JSONユーティリティ関数
         function copyJsonToClipboard(base64Json) {
             try {
-                const jsonString = atob(base64Json);
+                const jsonString = safeBase64Decode(base64Json);
+                if (!jsonString) {
+                    alert('JSONの復号化に失敗しました');
+                    return;
+                }
                 navigator.clipboard.writeText(jsonString).then(() => {
                     alert('JSONがクリップボードにコピーされました！');
                 }).catch(err => {
@@ -3283,7 +3526,11 @@
 
         function downloadJsonFile(base64Json, filename) {
             try {
-                const jsonString = atob(base64Json);
+                const jsonString = safeBase64Decode(base64Json);
+                if (!jsonString) {
+                    alert('JSONの復号化に失敗しました');
+                    return;
+                }
                 const blob = new Blob([jsonString], { type: 'application/json' });
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
