@@ -663,6 +663,40 @@ function sendTestEmail(programName, weekType) {
 // =============================================================================
 
 /**
+ * 権限承認用のテスト関数
+ * Apps Scriptエディタから実行して、DriveとDocumentsの権限を承認してください
+ */
+function testPDFPermissions() {
+    try {
+        Logger.log('[TEST] 権限テスト開始');
+
+        // DriveAppの権限テスト
+        const files = DriveApp.getFiles();
+        Logger.log('[TEST] DriveApp権限: OK');
+
+        // DocumentAppの権限テスト
+        const doc = DocumentApp.create('PDF権限テスト');
+        const docId = doc.getId();
+        Logger.log('[TEST] DocumentApp権限: OK');
+
+        // テストドキュメントを削除
+        DriveApp.getFileById(docId).setTrashed(true);
+        Logger.log('[TEST] テストドキュメント削除: OK');
+
+        Logger.log('[TEST] 全ての権限テストが成功しました！');
+        return '権限テスト成功！PDF機能が使用可能です。';
+
+    } catch (error) {
+        Logger.log('[TEST] エラー: ' + error.message);
+        throw error;
+    }
+}
+
+// =============================================================================
+// PDF生成機能
+// =============================================================================
+
+/**
  * 番組データをPDF化してダウンロード用URLを返す
  * @param {string} programName - 番組名
  * @param {string} weekType - 週タイプ
