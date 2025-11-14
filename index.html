@@ -963,8 +963,11 @@
                     displayBtn.disabled = false;
 
                     if (result.success) {
-                        // データを保存
-                        currentData = result;
+                        // 表形式とJSONの両方を生成（先にソート）
+                        const sortedResult = sortResultByDays(result);
+
+                        // ソート済みデータを保存
+                        currentData = sortedResult;
 
                         // 成功情報を表示
                         successInfo.innerHTML = `
@@ -974,26 +977,24 @@
                             <div class="info-grid">
                                 <div class="info-item">
                                     <span class="info-label">番組:</span>
-                                    <span class="info-value">${result.programName}</span>
+                                    <span class="info-value">${sortedResult.programName}</span>
                                 </div>
                                 <div class="info-item">
                                     <span class="info-label">週:</span>
-                                    <span class="info-value">${getWeekLabel(result.weekType)}</span>
+                                    <span class="info-value">${getWeekLabel(sortedResult.weekType)}</span>
                                 </div>
                                 <div class="info-item">
                                     <span class="info-label">シート:</span>
-                                    <span class="info-value">${result.sheetName}</span>
+                                    <span class="info-value">${sortedResult.sheetName}</span>
                                 </div>
                                 <div class="info-item">
                                     <span class="info-label">取得時刻:</span>
-                                    <span class="info-value">${formatTimestamp(result.timestamp)}</span>
+                                    <span class="info-value">${formatTimestamp(sortedResult.timestamp)}</span>
                                 </div>
                             </div>
                         `;
                         successInfo.classList.remove('hidden');
 
-                        // 表形式とJSONの両方を生成
-                        const sortedResult = sortResultByDays(result);
                         generateTableView(sortedResult);
                         document.getElementById('jsonCode').textContent = JSON.stringify(sortedResult, null, 2);
 
@@ -1320,6 +1321,20 @@
                 return;
             }
 
+            // currentDataから番組名と週タイプを取得
+            const programName = currentData.programName;
+            const weekType = currentData.weekType;
+
+            // デバッグログ
+            console.log('[PDF] currentData:', currentData);
+            console.log('[PDF] programName:', programName);
+            console.log('[PDF] weekType:', weekType);
+
+            if (!programName || !weekType) {
+                alert('番組名または週タイプが取得できません。もう一度データを表示してください。');
+                return;
+            }
+
             const pdfBtn = document.getElementById('pdfDownloadBtn');
             const originalText = pdfBtn.textContent;
 
@@ -1327,7 +1342,7 @@
             pdfBtn.disabled = true;
             pdfBtn.textContent = 'PDF生成中...';
 
-            console.log('[PDF] PDF生成開始:', currentData.programName, currentData.weekType);
+            console.log('[PDF] PDF生成開始:', programName, weekType);
 
             // Google Apps ScriptのPDF生成関数を呼び出し
             google.script.run
@@ -1353,7 +1368,7 @@
                     console.error('[PDF] 通信エラー:', error);
                     alert('PDF生成通信エラー: ' + error.message);
                 })
-                .generateProgramPDF(currentData.programName, currentData.weekType);
+                .generateProgramPDF(programName, weekType);
         }
     </script>
 </body>
